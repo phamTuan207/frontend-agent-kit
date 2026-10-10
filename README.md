@@ -21,6 +21,8 @@ Nếu muốn giao Codex tự làm, clone repo rồi nhắn:
 
 ## Dùng gì khi nào?
 
+**Sổ tay đầy đủ:** [HUONG-DAN.md](HUONG-DAN.md) — bảng chọn từng skill, cách kết hợp, prompt mẫu và cách kiểm tra kết quả.
+
 | Nhu cầu | Gọi skill |
 |---|---|
 | Thiết kế/xây/review giao diện | **Impeccable** làm hướng chính |
