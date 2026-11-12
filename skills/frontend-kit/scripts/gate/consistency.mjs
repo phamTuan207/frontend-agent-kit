@@ -357,7 +357,7 @@ const checks = [
   { id: 'visual-empty', sev: 'FAIL', what: 'a visual of 120x80px or more showing under 6 colours or only a smooth gradient at this width (blank FAILs), or a broken picture' },
   { id: 'effect-kind', sev: 'FAIL', what: 'an effect on a place, service or plain product page; past 4 live WebGL contexts, one scene or two scroll moments on a tech page' },
   { id: 'hero-enter', sev: 'WARN', what: 'a hero that does not enter on load: no data-enter on it, or no head line setting html.m-enter (data-enter="off" on a hero holding a big scene is its entrance)' },
-  { id: 'moment-none', sev: 'WARN', what: 'a page with no dealt moment (every kind carries one, two on a long page); the gate holds it as a FAIL' },
+  { id: 'moment-none', sev: 'WARN', what: 'a page with no dealt moment (every kind carries one, two on a long page); a WARN, never a FAIL' },
 ];
 const fixes = {
   'visual-caption': 'take the line away: no caption or description under, over or on any image, render or visual; a licence credit goes in one footer line',
@@ -380,7 +380,7 @@ const summary = [
   '             above 4 live WebGL contexts, 8 created, one big scene, two scroll moments, or no reduced-motion or phone branch;',
   '             every kind: moment-none, a page with no dealt moment, WARNs)',
   '  motion     hero-enter (every kind: a hero without data-enter, or a page without the head line that sets html.m-enter, WARN;',
-  '             gate.mjs holds hero-enter and moment-none as FAILs)',
+  '             moment-none (a page with no dealt moment) WARNs too; the gate holds neither as a FAIL)',
 ].join('\n');
 const flags = [{ name: 'tech-subject', kind: 'bool', default: false, help: 'a product page with a technical subject (hardware, a device): effects are judged as on a tech page' }];
 const quick = true;
@@ -1197,7 +1197,7 @@ function effectFindings(ctx, K) {
     put(ctx, f, K.enter.hero.doc);
     F.push(f);
   }
-  // its own id (not effect-kind, which reads as "take an effect off"); a WARN here, a FAIL at the gate
+  // its own id (not effect-kind, which reads as "take an effect off"); a WARN here and at the gate (D19)
   if (ctx.first && !(K.moments || []).length && !momentsTag && !S.told.has('moment-none')) {
     S.told.add('moment-none');
     const f = { check: 'moment-none', sev: 'WARN', id: 0, sel: '(the page)', text: '', msg: `${page} deals no moment: every kind carries one, two on a long page (moments.md)`, fix: `deal one (moments.mjs pick --page ${kind}${noEffect ? ' --photo' : ''}) and mount it in its own section` };
