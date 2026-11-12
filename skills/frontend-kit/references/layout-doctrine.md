@@ -265,7 +265,13 @@ next section on the first screen.
   (under 15% FAILs, 15–25% WARNs): a photograph (`<img>` with alt text)
   or a UI mock. For a DIGITAL product the app's own UI mock IS the visual.
 - Mark the mock `[data-ui]` and make it LARGE (≥120×80px — the checker
-  ignores anything smaller). A small inline SVG icon (32px) does NOT count:
+  ignores anything smaller). **The one definition (D17):** a mock is a
+  `[data-ui]` element — the attribute's value names the fragment; the
+  checker reads the mark, never the value — or a `.ui` root carrying
+  `ui-*` classes; every checker test uses the one selector for it, and
+  the ≥120×80px size is what earns the section's visual credit. An
+  element with only a `ui-*` class (no `[data-ui]`, no `.ui` root) is
+  NOT a mock: it is page content. A small inline SVG icon (32px) does NOT count:
   probe 2's four 32px card icons covered ~0% and all four sections failed
   `no-visual`. Put the mock in the split's right column (§3) or full-width
   in its own row; a lesson-card mock the size of a postage stamp is not a

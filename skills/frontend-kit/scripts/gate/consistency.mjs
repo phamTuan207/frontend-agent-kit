@@ -1625,8 +1625,9 @@ function probe(scan) {
   // (a phone context is a tel: link or an itemprop telephone only: a class named phone is as often a device mock)
   // a stat, spec or figure row holds counts (4000 Bookings, 2400 Lumen), never an address on its own
   const STAT = /(?:^|[\s_-])(?:stats?|statistics?|specs?|specifications?|metrics?|kpis?|figures?|numbers?|counters?|counts?|facts?|tally|data-?row)(?:[\s_-]|$)/i;
-  const ctxOf = (e) => ({ addr: !!e.closest('address, [itemtype*="PostalAddress" i]') || named(e, ADDR, 4), near: named(e, NEAR, 6), tel: !!e.closest('a[href^="tel:" i], [itemprop~="telephone" i]'), mock: !!e.closest('svg, [data-ui], .ui, [data-ui-loop], [data-m-loop], [data-diagram], [data-big-scene], [data-scene], [class*="mock" i]'), stat: named(e, STAT, 4) });
-  const where = (e) => (e.closest('svg') ? 'on a drawn picture' : e.closest('[data-ui], .ui') ? 'in a product mock' : '');
+  const MOCK = '[data-ui], .ui[class*=ui-]'; // D17: THE mock selector — a drawn mock is a [data-ui] element or a .ui root carrying ui-* classes (layout-doctrine.md §5); every mock test uses this one spelling, never a respelling
+  const ctxOf = (e) => ({ addr: !!e.closest('address, [itemtype*="PostalAddress" i]') || named(e, ADDR, 4), near: named(e, NEAR, 6), tel: !!e.closest('a[href^="tel:" i], [itemprop~="telephone" i]'), mock: !!e.closest('svg, ' + MOCK + ', [data-ui-loop], [data-m-loop], [data-diagram], [data-big-scene], [data-scene], [class*="mock" i]'), stat: named(e, STAT, 4) });
+  const where = (e) => (e.closest('svg') ? 'on a drawn picture' : e.closest(MOCK) ? 'in a product mock' : '');
   const out = [];
   const push = (hits, el, extra, boxOf) => { for (const h of hits) { if (out.length >= 300) return; out.push({ check: h.check, key: h.key, what: h.what.replace(/\s+/g, ' ').slice(0, 80), why: h.why, sel: el ? sel(el) : extra.sel, where: [el ? where(el) : '', extra.where || ''].filter(Boolean).join(', '), doc: boxOf ? boxOf(h) : null }); } };
 
@@ -1806,8 +1807,8 @@ const rhythmMod = (() => {
 // Flags: --rhythm-widths 1440,768,390 (the widths it runs at: 1440-like, 768-like or 390-like; 768 is a tablet held upright, 768x1024), --no-rhythm-expand (no expansion pass;
 // --quick skips it too), --no-rhythm (skip the module).
 // Departures from rhythm-check.mjs, deliberate (from the first runs): near-full-bleed boxes are skipped
-// under 12px on a phone (40px on a desktop, as the original); the rows and columns of a drawn mock ([data-ui], .ui,
-// [data-ui-loop], [data-m-loop], [data-diagram]) are no card rows or splits, and its words keep their own lines; two
+// under 12px on a phone (40px on a desktop, as the original); the rows and columns of a drawn mock (MOCK, D17,
+// and its loops and diagrams: [data-ui-loop], [data-m-loop], [data-diagram]) are no card rows or splits, and its words keep their own lines; two
 // columns repeated in three or more sibling rows of one class are a table's rows, not splits; a text block on a card laid
 // over a picture (a boxed, absolute ancestor) and a list item whose words follow its icon are not held to the left lines.
 // Not checked (as in rhythm-check.mjs): SR-9 and SR-10's units; the --lang flags of CK-04; clip-path, mask and
@@ -1875,6 +1876,7 @@ function measure(opt) {
   const de = document.documentElement, body = document.body;
   const W = de.clientWidth, H = window.innerHeight, SX = window.scrollX, SY = window.scrollY;
   const phone = W <= 640;
+  const MOCK = '[data-ui], .ui[class*=ui-]'; // D17: THE mock selector — a drawn mock is a [data-ui] element or a .ui root carrying ui-* classes (layout-doctrine.md §5); every mock test uses this one spelling, never a respelling
   const notes = [];
   // the harness (CK-04): no verdict when the page is not W wide (a page with no viewport meta tag lays out 980px wide
   // on a phone and is shrunk to fit: the module tells that on its own)
@@ -2266,7 +2268,7 @@ function measure(opt) {
   for (const G of gridLikes) {
     // the rows and columns inside a drawn mock (a file list, a window's rows) are the mock's own layout, not the page's
     // card rows or splits: its frame is judged, not them (seen on a test page)
-    if (G.el.closest('[data-ui], .ui, [data-ui-loop], [data-m-loop], [data-diagram]')) continue;
+    if (G.el.closest(MOCK + ', [data-ui-loop], [data-m-loop], [data-diagram]')) continue;
     const items = G.kids.filter((k) => !isCtl(k)).map((k) => ({ el: k, r: rectOf(k) }));
     const nest = nestAnc(G.el, G.z);
     const Cz = C(G.z), cw = Cz.r - Cz.l;
@@ -2551,7 +2553,7 @@ function measure(opt) {
       if (line('Left') || line('Right') || ['TopLeft', 'TopRight', 'BottomLeft', 'BottomRight'].some((c) => parseFloat(st['border' + c + 'Radius']) > 0) || alpha(st.backgroundColor) > 0.01 || (st.backgroundImage && st.backgroundImage !== 'none') || st.boxShadow !== 'none') continue;
       // a line drawn inside (or on) a picture, a UI mock, a frame or a card (a toolbar's edge, a table row in a mock) is part
       // of that drawing, not a rule between the section's parts
-      if (el.closest('.frame, .card, .panel, figure, fieldset, [data-ui], .ui, [data-ui-loop], [data-m-loop], [data-visual], [data-diagram], [data-big-scene]')) continue;
+      if (el.closest('.frame, .card, .panel, figure, fieldset, ' + MOCK + ', [data-ui-loop], [data-m-loop], [data-visual], [data-diagram], [data-big-scene]')) continue;
       // the hairline over the hero's docked foot or facts (heroes.json: editorial, statement, photo, word) is the hero's own
       if (S[z].isHero) continue;
       const cw = C(z).r - C(z).l;
@@ -2767,7 +2769,7 @@ function measure(opt) {
     };
     const heroBoxMemo = new Map();
     const heroBox = (el) => {
-      if (secIdx(el) !== 0 || !heroH1 || el.closest('[data-ui], .ui, [data-ui-loop], [data-m-loop], [data-diagram], [role="img"], [aria-hidden="true"]')) return null;
+      if (secIdx(el) !== 0 || !heroH1 || el.closest(MOCK + ', [data-ui-loop], [data-m-loop], [data-diagram], [role="img"], [aria-hidden="true"]')) return null;
       for (let e = el.parentElement; e && e !== S[0].el && e !== S[0].wrap && e !== body; e = e.parentElement) if (boxed(e) && !layerOf(e) && innerBox(e).l > c0.l + 2) {
         if (!e.contains(heroH1.el)) return null;
         if (!heroBoxMemo.has(e)) heroBoxMemo.set(e, picUnder(e));
@@ -2811,7 +2813,7 @@ function measure(opt) {
       if (!ex) for (let e = el; e && e !== S[z].el; e = e.parentElement) { if (e !== el && boxed(e) && wd(rectOf(e)) <= 0.5 * cw) { ex = 'small boxed element'; break; } }
       // a drawn mock's words and a card laid over a picture (a map's address card) set their own lines; a list item
       // whose words follow its icon starts at the icon (seen on a test page)
-      if (!ex && el.closest('[data-ui], .ui, [data-ui-loop], [data-m-loop], [data-diagram]')) ex = 'drawn mock';
+      if (!ex && el.closest(MOCK + ', [data-ui-loop], [data-m-loop], [data-diagram]')) ex = 'drawn mock';
       if (!ex) for (let e = el.parentElement; e && e !== S[z].el; e = e.parentElement) { if (boxed(e) && cs(e).position === 'absolute') { ex = 'card over a picture'; break; } }
       if (!ex && tag === 'LI' && el.querySelector(':scope > svg, :scope > img, :scope > i, :scope > [class*="icon"], :scope > [class*="check"]')) ex = 'list item with an icon';
       // (the kit's .checks list draws its tick as the item's ::before, a grid column of its own)
@@ -3789,6 +3791,7 @@ const WARN_AT = 0.35, FAIL_AT = 0.5;
 
 // the in-page read (serialised: nothing from module scope)
 function areaProbe() {
+  const MOCK = '[data-ui], .ui[class*=ui-]'; // D17: THE mock selector — a drawn mock is a [data-ui] element or a .ui root carrying ui-* classes (layout-doctrine.md §5); every mock test uses this one spelling, never a respelling
   const H = innerHeight, W = document.documentElement.clientWidth || innerWidth, SY = scrollY;
   const cs = (e) => getComputedStyle(e);
   const sel = (el) => {
@@ -3858,7 +3861,7 @@ function areaProbe() {
         add(D(r), el); if (el.matches(VIS)) continue;
       } else if (el.matches(VIS)) {
         // a drawing as large as most of the section (a pattern, a wave) is ground; a mock or an icon is content
-        if (!(big && (el.matches('svg') || el.getAttribute('aria-hidden') === 'true') && !el.matches('[data-ui], [data-diagram], [role="img"]'))) add(D(r), el);
+        if (!(big && (el.matches('svg') || el.getAttribute('aria-hidden') === 'true') && !el.matches(MOCK + ', [data-diagram], [role="img"]'))) add(D(r), el);
         continue;
       } else if (el.matches('a, button, input, select, textarea, label')) add(D(r), el);
       // (a row ruled above or below, a question or a line of a list, covers its width; a rule down one side of a tall
@@ -4057,7 +4060,8 @@ let toggleDone = false;
 
 // ---------------------------------------------------------------- in the page: shared helpers, sent with every probe
 const LIB = String.raw`
-  const DRAWN = '[data-ui], .ui[class*=ui-], [role="img"], [aria-hidden="true"], [inert], [data-diagram], .d-win, .d-chat, .ly-piece, .dw, .app-frame, .device, [data-ly-steps]';
+  const MOCK = '[data-ui], .ui[class*=ui-]'; // D17: THE mock selector — a drawn mock is a [data-ui] element or a .ui root carrying ui-* classes (layout-doctrine.md §5); every mock test uses this one spelling, never a respelling
+  const DRAWN = MOCK + ', [role="img"], [aria-hidden="true"], [inert], [data-diagram], .d-win, .d-chat, .ly-piece, .dw, .app-frame, .device, [data-ly-steps]';
   const PAUSE = '.loop-pause, .ui-pause, [data-pause]';
   const drawn = (el) => !!(el && el.closest && el.closest(DRAWN)) && !(el.matches && el.matches(PAUSE));
   const sel = (el) => {
@@ -4139,7 +4143,7 @@ function pageProbe() {
     const ph = el.closest('[aria-hidden="true"], [inert]'); if (ph) continue;
     const up = el.parentElement && el.parentElement.closest('[role="img"]'); if (up) continue;
     if (el.tagName === 'IMG') {
-      if (el.closest('[data-ui], .ui[class*=ui-]')) continue;
+      if (el.closest(MOCK)) continue;
       const r = el.getBoundingClientRect(); if (r.width && r.width < 4 && r.height < 4) continue;
       if (!el.hasAttribute('alt')) out.alts.push({ sev: 'FAIL', sel: sel(el), src: /^data:/.test(el.getAttribute('src') || '') ? 'a data: picture' : (el.currentSrc || el.getAttribute('src') || '').split('/').pop().slice(0, 50), why: 'has no alt', doc: doc(el) });
       else if (/\.(jpe?g|png|webp|avif|gif|svg)$/i.test(el.alt.trim()) || /^(image|photo|picture|img|bild|foto)\s*\d*$/i.test(el.alt.trim())) out.alts.push({ sev: 'WARN', sel: sel(el), src: (el.getAttribute('src') || '').split('/').pop().slice(0, 50), why: 'has alt "' + el.alt.trim().slice(0, 40) + '", a file name or a bare word, not what it shows', doc: doc(el) });
@@ -5029,6 +5033,7 @@ function lib() {
   const MEDIA = new Set(['IMG', 'VIDEO', 'CANVAS', 'IFRAME', 'OBJECT', 'EMBED']);
   const SKIP = new Set(['SCRIPT', 'STYLE', 'LINK', 'META', 'NOSCRIPT', 'TEMPLATE', 'BR', 'WBR', 'SOURCE', 'TRACK', 'HEAD', 'TITLE', 'PARAM', 'AREA', 'MAP', 'DATALIST', 'OPTION', 'OPTGROUP']);
   const INTER = 'a[href], button, [role="button"], input[type="submit"], input[type="button"], input[type="reset"], summary';
+  const MOCK = '[data-ui], .ui[class*=ui-]'; // D17: THE mock selector — a drawn mock is a [data-ui] element or a .ui root carrying ui-* classes (layout-doctrine.md §5); every mock test uses this one spelling, never a respelling
   const LOOK_TAGS = new Set(['SPAN', 'DIV', 'P', 'B', 'STRONG', 'EM', 'SMALL', 'LABEL', 'I', 'MARK']);
   let nextId = 1; const ids = new WeakMap(); const els = new Map();
   const idOf = (el) => { let i = ids.get(el); if (!i) { i = nextId++; ids.set(el, i); els.set(i, el); } return i; };
@@ -5531,7 +5536,7 @@ function lib() {
       let up = false; for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) if (tilted(tiltC(a))) { up = true; break; }
       if (up) continue;
       // letters of a word set one by one (aria-hidden copies of a heading count: they are what shows)
-      if (r.width < 48 && r.height < 48 && ownText(el) && !el.closest('[data-ui], .ui[class*=ui-], [data-fx], [data-fx-mounted], [role="img"]')) { const b = el.closest(HEADS + ', p') || el.parentElement; if (!bent.has(b)) bent.set(b, []); bent.get(b).push(r); continue; }
+      if (r.width < 48 && r.height < 48 && ownText(el) && !el.closest(MOCK + ', [data-fx], [data-fx-mounted], [role="img"]')) { const b = el.closest(HEADS + ', p') || el.parentElement; if (!bent.has(b)) bent.set(b, []); bent.get(b).push(r); continue; }
       if (r.width < 48 && r.height < 48) continue; // an icon or an arrow
       const btn = el.matches(INTER) ? el : null;
       if ((btn && buttonLook(btn, true)) || (LOOK_TAGS.has(el.tagName) && buttonLook(el, false))) continue; // judged as a button
@@ -5543,7 +5548,7 @@ function lib() {
     for (const [b, rs] of bent) if (rs.length >= 3) add(out, 'tilt', 'FAIL', b, `${rs.length} letters or words of this text are turned one by one (text set on a curve or a slant)`, rs.slice(0, 12));
     // text set on a curve as an SVG textPath (a heading on an arch, a rotating badge), outside the nav and drawn mocks
     for (const [el, r] of view) {
-      if (el.tagName.toLowerCase() !== 'svg' || seen.curve.has(el) || el.closest('[data-ui], .ui[class*=ui-], [data-fx], [data-fx-mounted]') || inFixed(el) || inChrome(el)) continue;
+      if (el.tagName.toLowerCase() !== 'svg' || seen.curve.has(el) || el.closest(MOCK + ', [data-fx], [data-fx-mounted]') || inFixed(el) || inChrome(el)) continue;
       const t = [...el.querySelectorAll('textPath')].map((x) => String(x.textContent || '').replace(/\s+/g, ' ').trim()).find((x) => x.replace(/\s/g, '').length >= 6);
       if (!t) continue;
       seen.curve.add(el);
@@ -5599,7 +5604,7 @@ function lib() {
         if (P.el.tagName === 'CANVAS' && /absolute|fixed/.test(CS(P.el).position)) continue;
         if (P.st !== B.st && !(P.st && P.st.contains(B.el))) continue; // a held stage slides over what is outside it
         // a popover a drawn mock places over its own page (a note hanging past the page edge) is drawn so on purpose
-        if (/absolute|fixed/.test(CS(B.el).position)) { const m = B.el.parentElement && B.el.parentElement.closest('[data-ui], .ui[class*=ui-], [role="img"]'); if (m && m.contains(P.el)) continue; }
+        if (/absolute|fixed/.test(CS(B.el).position)) { const m = B.el.parentElement && B.el.parentElement.closest(MOCK + ', [role="img"]'); if (m && m.contains(P.el)) continue; }
         if (P.area < 0.3 * B.area) continue;
         const ix = Math.max(0, Math.min(B.v.right, P.v.right) - Math.max(B.v.left, P.v.left));
         const iy = Math.max(0, Math.min(B.v.bottom, P.v.bottom) - Math.max(B.v.top, P.v.top));
@@ -5688,14 +5693,14 @@ function lib() {
         const where = worst.how.startsWith('screen') ? `cut ${worst.by}px by the ${worst.how === 'screen-left' ? 'left' : 'right'} edge of the screen` : `cut ${worst.by}px at the ${worst.how} by the overflow of ${sel(worst.by_)}`;
         // a drawn fragment run out through its panel's edge (a bleed) is cut there on purpose: a WARN, so the cut
         // falls between lines or under the edge's fade
-        const mk = el.closest('[data-ui], .ui[class*=ui-], [role="img"]'), bleed = !!(mk && worst.by_ && worst.by_ !== mk && worst.by_.contains(mk));
+        const mk = el.closest(MOCK + ', [role="img"]'), bleed = !!(mk && worst.by_ && worst.by_ !== mk && worst.by_.contains(mk));
         add(out, 'cut-text', bleed ? 'WARN' : 'FAIL', el, bleed ? `${where}: a fragment run out through its panel's edge` : where, [worst.line, ...(worst.by_ ? [Object.assign(R(worst.by_.getBoundingClientRect()), { ref: true })] : [])]);
         continue;
       }
       if (hidden && visible) {
         // a drawn mock cropped by its frame (a bleed: the page runs on past the panel's edge) hides whole lines on
         // purpose; a line sliced through is told above
-        const mock = el.closest('[data-ui], .ui[class*=ui-], [role="img"]');
+        const mock = el.closest(MOCK + ', [role="img"]');
         if (!(mock && hider && hider.contains(mock) && hider !== mock)) add(out, 'cut-text', 'FAIL', el, `${hidden} of ${hidden + visible} lines hidden by the overflow of ${sel(hider)}`, [r]);
         continue;
       }
@@ -5722,7 +5727,7 @@ function lib() {
         }
       }
       // a line sitting across the edge of a panel behind it (a mock's own parts are drawn as they are)
-      if (el.closest('[data-ui], .ui[class*=ui-], [role="img"]')) continue;
+      if (el.closest(MOCK + ', [role="img"]')) continue;
       for (const L of ls.slice(0, 3)) {
         const x = (L.left + L.right) / 2; if (x < 0 || x >= vw || L.top < 1 || L.bottom > vh - 1 || L.height < 8) continue;
         const a = under(x, L.top + 1, el), b = under(x, L.bottom - 1, el);
@@ -5737,7 +5742,7 @@ function lib() {
   // or inside a drawn mock (data-ui, role=img, aria-hidden), keeps to the box's own edges, not the page's
   const isBand = (r, vw) => r.left <= Math.max(12, vw * 0.02) && r.right >= vw - Math.max(12, vw * 0.02);
   function onGround(el, vw) {
-    if (el.parentElement && el.parentElement.closest('[data-ui], .ui[class*=ui-], [role="img"], [aria-hidden="true"]')) return false;
+    if (el.parentElement && el.parentElement.closest(MOCK + ', [role="img"], [aria-hidden="true"]')) return false;
     for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
       const k = surface(a);
       if (k && k !== 'media' && !isBand(a.getBoundingClientRect(), vw)) return false;
@@ -5884,7 +5889,7 @@ function lib() {
       if (!/grid/.test(c.display)) continue;
       if ((c.gridTemplateColumns || '').split(/\s+/).filter((t) => /px$/.test(t)).length < 2) continue;
       if (!first(seen.rows, g, r)) continue;
-      if (inFixed(g) || inScroller(g) || (g.parentElement && g.parentElement.closest('[data-ui], .ui[class*=ui-], [role="img"], [aria-hidden="true"]'))) continue;
+      if (inFixed(g) || inScroller(g) || (g.parentElement && g.parentElement.closest(MOCK + ', [role="img"], [aria-hidden="true"]'))) continue;
       const cl = r.left + (parseFloat(c.paddingLeft) || 0) + (parseFloat(c.borderLeftWidth) || 0);
       const cr = r.right - (parseFloat(c.paddingRight) || 0) - (parseFloat(c.borderRightWidth) || 0);
       const cw = cr - cl; if (cw < 200) continue;
@@ -5940,7 +5945,7 @@ function lib() {
         if (el.parentElement && ownText(el.parentElement)) continue; // a highlight inside running text
         // a span or div only looks like a button inside a drawn mock (a fragment's own buttons); on the page it is a
         // label, a chip or a data bar
-        if (!el.closest('[data-ui], .ui[class*=ui-], [role="img"]')) continue;
+        if (!el.closest(MOCK + ', [role="img"]')) continue;
       }
       // a bar or a row: a label with its value set at the far end ("Bed ... 2 m"), not a button
       {
@@ -5952,7 +5957,7 @@ function lib() {
       if (looks.some((a) => a.contains(el))) continue;
       // a real <button> inside a drawn mock (a UI fragment) is a part of the mock: it counts on its screen, not in the
       // page's own button family
-      const mock = !!(el.parentElement && el.parentElement.closest('[data-ui], .ui[class*=ui-], [role="img"], [aria-hidden="true"]'));
+      const mock = !!(el.parentElement && el.parentElement.closest(MOCK + ', [role="img"], [aria-hidden="true"]'));
       const L = buttonLook(el, real && !mock); if (!L) continue;
       if (!/\p{L}/u.test(L.text)) continue; // a number (a date cell, a page number) is not a button label
       if (playCtl(el)) continue; // a film's play control is the film's own, not one of the page's button styles
@@ -6098,11 +6103,11 @@ function lib() {
       return { x0: x0 / cw, x1: (x1 + 1) / cw, y0: y0 / ch, y1: (y1 + 1) / ch, flat: true };
     } catch (e) { return null; }
   }
-  const DRAWN = '[data-ui], .ui[class*=ui-], [role="img"], [data-fx], [data-fx-mounted], [aria-hidden="true"]';
+  const DRAWN = MOCK + ', [role="img"], [data-fx], [data-fx-mounted], [aria-hidden="true"]';
   const inDrawn = (el) => !!(el && el.closest && el.closest(DRAWN));
   // drawn mocks the stagger check leaves alone besides DRAWN: the ui kit's fragments and loops, a diagram, and the layout
   // kit's own windows and pieces (a chat, a diff, an inbox)
-  const STAGGER_DRAWN = '.ui, [data-ui-loop], [data-m-loop], [data-diagram], [data-ly-steps], .d-win, .d-chat, .ly-piece, [class*="ui-chat"], [class*="ui-diff"]';
+  const STAGGER_DRAWN = MOCK + ', [data-ui-loop], [data-m-loop], [data-diagram], [data-ly-steps], .d-win, .d-chat, .ly-piece, [class*="ui-chat"], [class*="ui-diff"]';
   // a dealt moment (moments.md): its host ([data-moment]) and the section that is or holds one; the moment's display
   // type, its scroll, pinned and enter motion belong to it (since 2.5.1 every kind deals one)
   const momentSec = (el) => {
@@ -6201,7 +6206,7 @@ function lib() {
     const secs = new Set(S);
     for (const [el, r] of view) {
       if (r.top < 0 || r.top >= vh * 0.7 || r.bottom <= vh + 2 || r.width < 200 || r.height < 150 || r.width > vw * 0.6 || secs.has(el) || inFixed(el)) continue;
-      const mock = el.matches('[data-ui], .ui[class*=ui-]') && !(el.parentElement && el.parentElement.closest('[data-ui], .ui[class*=ui-]'));
+      const mock = el.matches(MOCK) && !(el.parentElement && el.parentElement.closest(MOCK));
       const k = mock ? 'mock' : surface(el); if (!k || k === 'media' || k === 'picture' || k === 'effect') continue;
       if (!mock && inDrawn(el)) continue;
       if (el.closest('.stage, .panel, .panel__screen, .frame, [data-ui-pause-host]') && el.closest('.stage, .panel, .panel__screen, .frame, [data-ui-pause-host]') !== el) continue; // cut by its panel on purpose
@@ -6435,7 +6440,7 @@ function lib() {
         if (SKIP.has(k.tagName)) continue;
         const q = k.getBoundingClientRect(), c = CS(k);
         if (q.width < 60 || q.height < 80 || !shown(k, q) || /^inline/.test(c.display) || /absolute|fixed/.test(c.position)) continue;
-        if (!surface(k) && !k.querySelector('img, video, canvas, picture, svg, [data-ui], .ui[class*=ui-]') && q.height < 160) continue;
+        if (!surface(k) && !k.querySelector('img, video, canvas, picture, svg, ' + MOCK) && q.height < 160) continue;
         kids.push({ k, q });
       }
       if (kids.length < 2) continue;
@@ -6490,7 +6495,7 @@ function lib() {
   function checkMarquee(view, out, vw, vh) {
     for (const [el, r] of view) {
       // (a running line is often aria-hidden, its words read once from a label: it is still drawn on the page)
-      if (!(r.width > vw + 4 || r.left < -2 || r.right > vw + 2) || marquees.has(el) || inMarquee(el) || inFixed(el) || (el.closest && el.closest('[data-ui], .ui[class*=ui-], [role="img"], [data-fx], [data-fx-mounted]'))) continue;
+      if (!(r.width > vw + 4 || r.left < -2 || r.right > vw + 2) || marquees.has(el) || inMarquee(el) || inFixed(el) || (el.closest && el.closest(MOCK + ', [role="img"], [data-fx], [data-fx-mounted]'))) continue;
       let named = false; for (let a = el; a && a !== document.body && !named; a = a.parentElement) named = /marquee|ticker|running-?line/i.test(typeof a.className === 'string' ? a.className : '');
       if (!(endless(el) || loopers.has(idOf(el)) || named)) continue;
       const vis = clipRect(el, r); if (vis.left > 2 || vis.right < vw - 2) continue;
@@ -6509,7 +6514,7 @@ function lib() {
     for (const e of card.querySelectorAll('*')) {
       if (SKIP.has(e.tagName) || isSvgPart(e)) continue;
       const c = CS(e);
-      const vis = e.matches('img, video, canvas, picture, iframe, object, embed, svg, [data-ui], .ui[class*=ui-], [data-fx], [data-fx-mounted], [role="img"]') || (c.backgroundImage && c.backgroundImage !== 'none' && c.display !== 'inline');
+      const vis = e.matches('img, video, canvas, picture, iframe, object, embed, svg, ' + MOCK + ', [data-fx], [data-fx-mounted], [role="img"]') || (c.backgroundImage && c.backgroundImage !== 'none' && c.display !== 'inline');
       if (!vis) continue;
       const r = e.getBoundingClientRect(); if (r.width < 1 || !shown(e, r)) continue;
       const w = Math.min(r.right, q.right) - Math.max(r.left, q.left), h = Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top);
@@ -6549,7 +6554,7 @@ function lib() {
   function checkFragments(view, first, out, vw, vh) {
     const panels = new Map();
     for (const [el, r] of view) {
-      if (!el.matches('[data-ui], .ui[class*=ui-]') || (el.parentElement && el.parentElement.closest('[data-ui], .ui[class*=ui-]'))) continue;
+      if (!el.matches(MOCK) || (el.parentElement && el.parentElement.closest(MOCK))) continue;
       const panel = el.closest('.panel, .panel__screen, .frame, [data-ui-pause-host]');
       if (panel) { if (!panels.has(panel)) panels.set(panel, []); panels.get(panel).push({ el, r }); }
       if (!first(seen.frag, el, r)) continue;
@@ -6602,7 +6607,7 @@ function lib() {
   function collectPhotos(view, first, out, vw, vh) {
     for (const [el, r] of view) {
       if (!(el.tagName === 'IMG' || el.tagName === 'VIDEO') || !first(seen.photo, el, r)) continue;
-      if (el.parentElement && el.parentElement.closest('[data-ui], .ui[class*=ui-], [role="img"]')) continue;
+      if (el.parentElement && el.parentElement.closest(MOCK + ', [role="img"]')) continue;
       const src = el.currentSrc || el.src || ''; if (/\.svg(\?|#|$)/i.test(src) || /^data:image\/svg/i.test(src)) continue;
       const nw = el.tagName === 'IMG' ? el.naturalWidth : el.videoWidth, nh = el.tagName === 'IMG' ? el.naturalHeight : el.videoHeight;
       if (!nw || !nh || r.width < 120 || r.height < 80) continue;
@@ -6697,7 +6702,7 @@ function lib() {
       // what the button follows may be a list, a table of rows, a form, a picture or a mock rather than a paragraph: it
       // belongs to that block (a submit under its fields, an order button under its price rows)
       if (best && (best.dx > 300 || best.dy > 240)) {
-        for (const t of a.querySelectorAll('li, dt, dd, td, th, label, input, select, textarea, img, picture, video, canvas, [data-ui], .ui[class*=ui-], .frame, figure, table, dl')) {
+        for (const t of a.querySelectorAll('li, dt, dd, td, th, label, input, select, textarea, img, picture, video, canvas, ' + MOCK + ', .frame, figure, table, dl')) {
           if (el.contains(t) || t.contains(el) || t.closest(INTER)) continue;
           const q = t.getBoundingClientRect(); if (q.width < 8 || q.height < 8 || !shown(t, q)) continue;
           const dx = Math.max(0, q.left - r.right, r.left - q.right), dy = Math.max(0, q.top - r.bottom, r.top - q.bottom), d = Math.hypot(dx, dy);
@@ -6822,7 +6827,7 @@ function lib() {
     return false;
   }
   // a part of a drawn mock or an effect: its own loops are allowed (system.md), so it is judged more strictly
-  const inMock = (el) => !!(el.parentElement && el.parentElement.closest('[data-ui], .ui[class*=ui-], [data-fx], [data-fx-mounted], [role="img"]'));
+  const inMock = (el) => !!(el.parentElement && el.parentElement.closest(MOCK + ', [data-fx], [data-fx-mounted], [role="img"]'));
   const heldScopeOf = (el) => { for (const h of heldInfo) if (h.scope.contains(el)) return h; return null; };
 
   function vec(c, r, el) {
@@ -7238,7 +7243,7 @@ function lib() {
     for (const e of box.querySelectorAll('*')) {
       if (SKIP.has(e.tagName) || isSvgPart(e) || inFixed(e)) continue;
       const q = e.getBoundingClientRect(); if (q.width < 1 || q.height < 1 || !shown(e, q)) continue;
-      if (MEDIA.has(e.tagName) || e.tagName.toLowerCase() === 'svg' || e.matches(INTER + ', input, select, textarea, [data-ui], .ui[class*=ui-], [data-fx], [data-fx-mounted], [role="img"], hr')) { mark(clipRect(e, q)); continue; }
+      if (MEDIA.has(e.tagName) || e.tagName.toLowerCase() === 'svg' || e.matches(INTER + ', input, select, textarea, ' + MOCK + ', [data-fx], [data-fx-mounted], [role="img"], hr')) { mark(clipRect(e, q)); continue; }
       const k = quickKind(e);
       if (k && k !== 'shadow' && !(skipSelf && e === box) && !isBand(q, innerWidth)) { mark(clipRect(e, q)); continue; }
       if (ownText(e)) for (const l of lines(e)) mark(clipRect(e, l));
@@ -7280,7 +7285,7 @@ function lib() {
       if (SKIP.has(c.tagName) || isSvgPart(c) || inDrawn(c) || inFixed(c)) continue;
       const k = quickKind(c); if (!k || k === 'media' || k === 'picture' || k === 'effect') continue;
       const q = c.getBoundingClientRect(); if (q.width < 300 || q.height < 200 || q.width > vw * 0.95 || !shown(c, q)) continue;
-      if (c.parentElement && c.parentElement.closest('[data-ui], .ui[class*=ui-]')) continue;
+      if (c.parentElement && c.parentElement.closest(MOCK)) continue;
       const cc = CS(c), pl = parseFloat(cc.paddingLeft) || 0, pr = parseFloat(cc.paddingRight) || 0;
       const C = contentGrid(c, q.left + pl, q.top, Math.max(8, q.width - pl - pr), q.height, true);
       let run = 0, bestRun = 0, at = 0, seenContent = false;
@@ -7305,7 +7310,7 @@ function lib() {
   async function noVisual(type) {
     const vw = vwNow(), vh = innerHeight, S = sectionsList(), out = [], hl = [];
     const placeLike = type === 'place' || type === 'product';
-    const VIS = 'img, video, canvas, iframe, picture, object, embed, svg, [data-ui], .ui[class*=ui-], [role="img"], [data-fx], [data-fx-mounted]';
+    const VIS = 'img, video, canvas, iframe, picture, object, embed, svg, ' + MOCK + ', [role="img"], [data-fx], [data-fx-mounted]';
     const lastMain = S.filter((s) => s.tagName !== 'FOOTER').slice(-1)[0];
     for (const s of S) {
       if (s.tagName === 'FOOTER' || s.tagName === 'NAV' || !s.isConnected) continue;
@@ -7559,7 +7564,7 @@ function lib() {
     const stripes = [];
     for (const p of document.body.querySelectorAll('ul, ol, tbody, dl, div')) {
       const kids = [...p.children].filter((k) => !SKIP.has(k.tagName));
-      if (kids.length < 3 || new Set(kids.map((k) => k.tagName)).size > 1 || inDrawn(p) || inFixed(p) || p.closest('header, nav, dialog, [data-ui], .ui[class*=ui-]') || !visible(p)) continue;
+      if (kids.length < 3 || new Set(kids.map((k) => k.tagName)).size > 1 || inDrawn(p) || inFixed(p) || p.closest('header, nav, dialog, ' + MOCK) || !visible(p)) continue;
       const f = kids.map((k) => { const b = rgba(CS(k).backgroundColor); return b.a >= 0.3 ? hex(b) : 'none'; });
       const A = f.filter((x, i) => i % 2 === 0), B = f.filter((x, i) => i % 2 === 1);
       if (new Set(A).size !== 1 || new Set(B).size !== 1 || A[0] === B[0]) continue;
@@ -7582,7 +7587,7 @@ function lib() {
     };
     const outranked = [];
     for (const h of document.querySelectorAll('h2, h3')) {
-      if (inDrawn(h) || inFixed(h) || inChrome(h) || h.closest('footer, dialog, [data-ui], .ui[class*=ui-]') || !visible(h)) continue;
+      if (inDrawn(h) || inFixed(h) || inChrome(h) || h.closest('footer, dialog, ' + MOCK) || !visible(h)) continue;
       const hc = CS(h), hfs = parseFloat(hc.fontSize) || 16; if (hfs < 22) continue; // a small label over a statement is an eyebrow
       const hq = h.getBoundingClientRect();
       const w = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT); w.currentNode = h; let e, nx = null, nb = null;
@@ -7645,8 +7650,8 @@ function lib() {
   // pictures that show only on hover or focus: hidden at rest inside a card or link that is shown
   function hiddenCands() {
     const out = [];
-    for (const e of document.querySelectorAll('img, video, picture, canvas, [data-ui], .ui[class*=ui-]')) {
-      if (inChrome(e, 'dialog, [role="menu"], .nav__menu, details:not([open]), [hidden]') || inFixed(e) || (e.parentElement && e.parentElement.closest('[data-ui], .ui[class*=ui-]'))) continue;
+    for (const e of document.querySelectorAll('img, video, picture, canvas, ' + MOCK)) {
+      if (inChrome(e, 'dialog, [role="menu"], .nav__menu, details:not([open]), [hidden]') || inFixed(e) || (e.parentElement && e.parentElement.closest(MOCK))) continue;
       const r = e.getBoundingClientRect(); if (r.width < 80 || r.height < 60) continue;
       if (effOpacity(e) >= 0.05 && CS(e).visibility !== 'hidden') continue;
       const host = e.closest('a[href], button, [tabindex], article, li, .card') || e.parentElement;
@@ -7686,7 +7691,7 @@ function lib() {
     const e = els.get(id); if (!e) return null;
     const keys = ['transform', 'translate', 'scale', 'rotate', 'opacity', 'boxShadow', 'backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition', 'color', 'borderTopColor', 'borderBottomColor', 'outlineStyle', 'filter', 'textDecorationLine', 'textDecorationColor', 'letterSpacing', 'clipPath'];
     const sig = (x, ps) => { const c = getComputedStyle(x, ps); return keys.map((k) => c[k]).join('|') + (ps ? '|' + c.content + '|' + c.width + '|' + c.height : ''); };
-    const LOOP = '[data-ui], .ui[class*=ui-], [data-m-loop], [data-ui-loop], [data-diagram], [data-fx], canvas, video';
+    const LOOP = MOCK + ', [data-m-loop], [data-ui-loop], [data-diagram], [data-fx], canvas, video';
     const parts = [sig(e), sig(e, '::before'), sig(e, '::after')];
     for (const k of [...e.querySelectorAll('*')].slice(0, 80)) { if (k.closest(LOOP)) continue; parts.push(sig(k)); if (/^(A|BUTTON)$/.test(k.tagName) || k.querySelector('svg')) { parts.push(sig(k, '::after')); parts.push(sig(k, '::before')); } }
     const r = e.getBoundingClientRect();
@@ -7709,8 +7714,8 @@ function lib() {
       for (let i = picked.length - 1; i >= 0; i--) if (e.contains(picked[i])) { picked.splice(i, 1); out.splice(i, 1); }
       picked.push(e); out.push({ id: idOf(e), sel: sel(e), text: label(e), doc: D(r) });
     };
-    for (const e of document.querySelectorAll('.panel, .panel__screen, .frame, [data-fx], [data-fx-mounted]')) if (e.querySelector('canvas, [data-ui], .ui[class*=ui-]') || e.matches('[data-fx], [data-fx-mounted]')) take(e);
-    for (const e of document.querySelectorAll('[data-ui], .ui[class*=ui-], canvas, video')) { if (e.tagName === 'VIDEO' && e.controls) continue; take(e); }
+    for (const e of document.querySelectorAll('.panel, .panel__screen, .frame, [data-fx], [data-fx-mounted]')) if (e.querySelector('canvas, ' + MOCK) || e.matches('[data-fx], [data-fx-mounted]')) take(e);
+    for (const e of document.querySelectorAll(MOCK + ', canvas, video')) { if (e.tagName === 'VIDEO' && e.controls) continue; take(e); }
     if (document.getAnimations) for (const a of document.getAnimations()) {
       try { if (a.effect.getComputedTiming().iterations !== Infinity) continue; } catch { continue; }
       const e = a.effect && a.effect.target; if (e instanceof Element) take(e);
@@ -7795,7 +7800,7 @@ function lib() {
   const CREDIT = /\b(CC[ -]?BY(-[A-Z]{2})*( \d\.\d)?|CC0|Creative Commons|public domain|Wikimedia|Unsplash|Pexels|Pixabay|photo(graph)? by)\b/i;
   // a UI fragment: the ui kit's, and the layout kit's own drawn windows, panes and cards (assets/layout/demo.css) when
   // they are drawn mocks (aria-hidden, or inside a role="img" picture); a .d-card reused as a page's real card is a card
-  const FRAG = '[data-ui], .ui[class*=ui-], [aria-hidden="true"]:is(.d-win, .d-pane, .d-card), [role="img"] :is(.d-win, .d-pane, .d-card)';
+  const FRAG = MOCK + ', [aria-hidden="true"]:is(.d-win, .d-pane, .d-card), [role="img"] :is(.d-win, .d-pane, .d-card)';
   const PATTERN_FX = new Set(['grid-pulse', 'contour-lines', 'dot-terrain', 'dotted-globe', 'ridgeline', 'ruled-grounds']);
   const blockOf = (e) => { let b = e; while (b && b !== document.body && /^(inline|contents)/.test(CS(b).display) && !b.matches('a, button, label')) b = b.parentElement; return b || e; };
   const fxOf = (e) => (e.getAttribute('data-fx') || e.getAttribute('data-cx-effect') || e.getAttribute('data-glow') || '').trim();
@@ -8282,7 +8287,7 @@ function lib() {
       const r = t.getBoundingClientRect(); if (r.width < 8 || r.height < 8 || r.bottom < 0 || r.top > vh || inFixed(t)) continue;
       const loop = tm.iterations === Infinity;
       if (!loop && (a.currentTime || 0) > 900) continue;
-      const host = t.closest('section, article, figure, li, [data-ui], .ui[class*=ui-], .card') || t;
+      const host = t.closest('section, article, figure, li, ' + MOCK + ', .card') || t;
       if (seenM.has(host)) continue; seenM.add(host);
       out.push({ id: idOf(t), sel: sel(t), text: label(t), loop, name: a.animationName || a.transitionProperty || 'an animation', dur: Math.round(tm.duration), rect: R(clipRect(t, r)), doc: D(r) });
       if (out.length >= 12) break;
@@ -8405,8 +8410,8 @@ function lib() {
     // ui-centre across a card group: the fragments of sibling cards set at different places in their panels (three
     // centred, one pinned to an edge), read from the whole page at once
     { const groups = new Map();
-      for (const f of document.querySelectorAll('[data-ui], .ui[class*=ui-]')) {
-        if ((f.parentElement && f.parentElement.closest('[data-ui], .ui[class*=ui-]')) || !visible(f) || inFixed(f)) continue;
+      for (const f of document.querySelectorAll(MOCK)) {
+        if ((f.parentElement && f.parentElement.closest(MOCK)) || !visible(f) || inFixed(f)) continue;
         const panel = f.closest('.panel, .panel__screen, .frame, .stage'); if (!panel) continue;
         const card = (panel.parentElement && panel.parentElement.closest('article, .card, [class*="card"], li')) || panel;
         const grid = card.parentElement; if (!grid) continue;
@@ -8430,7 +8435,7 @@ function lib() {
       const tag = /^(PROGRESS|METER)$/.test(e.tagName) || e.getAttribute('role') === 'progressbar';
       let fill = null;
       if (!tag) for (const c of e.querySelectorAll('*')) { const q = c.getBoundingClientRect(); if (q.height >= r.height * 0.5 && q.height <= r.height + 1 && q.width > 2 && q.width < r.width * 0.97 && Math.abs(q.left - r.left) < 3 && rgba(CS(c).backgroundColor).a > 0.3) { fill = c; break; } }
-      if ((tag || fill) && !out.progress.some((p) => p.el.contains(e) || e.contains(p.el))) out.progress.push({ el: e, id: idOf(e), sel: sel(e), text: label(e.closest('[data-ui], .ui[class*=ui-]') || e.parentElement || e), fixed: inFixed(e), doc: doc(e) });
+      if ((tag || fill) && !out.progress.some((p) => p.el.contains(e) || e.contains(p.el))) out.progress.push({ el: e, id: idOf(e), sel: sel(e), text: label(e.closest(MOCK) || e.parentElement || e), fixed: inFixed(e), doc: doc(e) });
     }
     out.progress = out.progress.map(({ el, ...p }) => p);
     // photo-repeat: one picture shown twice on the page (the same latte in the hero and the bar). Pictures are compared
@@ -8678,7 +8683,7 @@ function lib() {
       for (let a = h.parentElement; a && a !== s; a = a.parentElement) { const k = quickKind(a); if (k && k !== 'media' && a.getBoundingClientRect().width < vw * 0.9) return; }
       const ls = deepLines(h); if (!ls.length) return;
       const left = Math.min(...ls.map((l) => l.left)), hr = h.getBoundingClientRect();
-      const beside = [...s.querySelectorAll('img, video, canvas, picture, svg, [data-ui], .ui[class*=ui-], [data-fx], .frame, .panel, figure, blockquote, aside, ul, ol, dl')].some((e) => { const q = e.getBoundingClientRect(); return q.width >= 60 && q.right <= left - 16 && q.bottom > hr.top - 200 && q.top < hr.bottom + 400 && shown(e, q); });
+      const beside = [...s.querySelectorAll('img, video, canvas, picture, svg, ' + MOCK + ', [data-fx], .frame, .panel, figure, blockquote, aside, ul, ol, dl')].some((e) => { const q = e.getBoundingClientRect(); return q.width >= 60 && q.right <= left - 16 && q.bottom > hr.top - 200 && q.top < hr.bottom + 400 && shown(e, q); });
       // a block centred on the page with its words set on the left (a narrow closing column)
       let blk = h.parentElement; while (blk && blk !== s && blk.getBoundingClientRect().width < vw * 0.4) blk = blk.parentElement;
       const br = (blk || h).getBoundingClientRect(), centredBlock = Math.abs((br.left + br.right) / 2 - vw / 2) <= 3 && br.width < vw * 0.8;
@@ -8767,7 +8772,7 @@ function lib() {
     // grid's row gap left at 16px glues the picture to the buttons above it)
     out.stackGap = [];
     if (vw < 1024) {
-      const VIS = 'img, picture, video, canvas, svg, [data-ui], .ui[class*=ui-], [data-fx], .frame, figure';
+      const VIS = 'img, picture, video, canvas, svg, ' + MOCK + ', [data-fx], .frame, figure';
       for (const g of document.querySelectorAll('main *')) {
         if (out.stackGap.length >= 4) break;
         const gc = CS(g); if (!/grid|flex/.test(gc.display) || inDrawn(g) || inFixed(g)) continue;
@@ -8775,8 +8780,8 @@ function lib() {
         for (let i = 0; i + 1 < kids.length; i++) {
           const a = kids[i], b = kids[i + 1], ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
           if (rb.top < ra.bottom - 2 || Math.abs(ra.left - rb.left) > 24) continue; // not stacked
-          const aText = !a.matches(VIS) && !a.querySelector('img, video, canvas, [data-ui], .ui[class*=ui-], [data-fx]') && /\S/.test(full(a));
-          const bVis = b.matches(VIS) || (!!b.querySelector('img, video, canvas, [data-ui], .ui[class*=ui-], [data-fx]') && full(b).length < 400 && quickKind(b));
+          const aText = !a.matches(VIS) && !a.querySelector('img, video, canvas, ' + MOCK + ', [data-fx]') && /\S/.test(full(a));
+          const bVis = b.matches(VIS) || (!!b.querySelector('img, video, canvas, ' + MOCK + ', [data-fx]') && full(b).length < 400 && quickKind(b));
           if (!aText || !bVis) continue;
           const ext = (() => { let bot = -1e9; for (const e of a.querySelectorAll('*')) { if (SKIP.has(e.tagName)) continue; const q = e.getBoundingClientRect(); if (q.height < 1 || !shown(e, q)) continue; if (e.matches(INTER) && quickKind(e)) bot = Math.max(bot, q.bottom); else if (ownText(e)) for (const l of lines(e)) bot = Math.max(bot, l.bottom); } return bot; })();
           const d = Math.round(rb.top - ext);
@@ -8903,7 +8908,7 @@ function lib() {
   function notePrints() {
     for (const cv of document.querySelectorAll('canvas')) {
       // (a print's canvas is aria-hidden: only a drawn mock around it counts as drawn)
-      if (printSeen.has(cv) || (cv.parentElement && cv.parentElement.closest('[data-ui], .ui[class*=ui-], [role="img"]')) || inFixed(cv)) continue;
+      if (printSeen.has(cv) || (cv.parentElement && cv.parentElement.closest(MOCK + ', [role="img"]')) || inFixed(cv)) continue;
       const q = cv.getBoundingClientRect(); if (q.width < 120 || q.height < 80) continue;
       const kit0 = /\bpk-canvas\b/.test(cv.className || '');
       // an effect ground, a scene or a printed object keeps its own still picture as its fallback: not a photograph
@@ -8942,14 +8947,14 @@ function lib() {
           const q = e.getBoundingClientRect(); if (q.width < vw * 0.85 || q.height < 160 || !shown(e, q)) continue;
           const c = CS(e); if (c.backgroundImage && c.backgroundImage !== 'none') continue;
           // a band holds words (a picture's frame, a panel behind a mock, is that picture's ground)
-          if (e.matches('.frame, .panel, figure, [data-fx], [data-fx-mounted], [data-ui], .ui[class*=ui-]') || !e.querySelector('h1, h2, h3, p, blockquote, ul, dl')) continue;
-          if ([...e.querySelectorAll('img, video, canvas, picture, [data-ui], .ui[class*=ui-], .frame')].some((m) => { const mq = m.getBoundingClientRect(); return mq.width * mq.height >= 0.5 * q.width * q.height; })) continue;
+          if (e.matches('.frame, .panel, figure, [data-fx], [data-fx-mounted], ' + MOCK) || !e.querySelector('h1, h2, h3, p, blockquote, ul, dl')) continue;
+          if ([...e.querySelectorAll('img, video, canvas, picture, ' + MOCK + ', .frame')].some((m) => { const mq = m.getBoundingClientRect(); return mq.width * mq.height >= 0.5 * q.width * q.height; })) continue;
           const b = rgba(c.backgroundColor); if (b.a >= 0.9) add(b, e, 'band');
         }
       }
       out.grounds = seen; }
     // split-align: in each split (text beside its visual), where the shorter of the two sits against the taller one
-    { const VISQ = 'img, video, canvas, picture, [data-ui], .ui[class*=ui-], [data-fx], [data-fx-mounted], .frame, .panel, iframe, [role="img"]';
+    { const VISQ = 'img, video, canvas, picture, ' + MOCK + ', [data-fx], [data-fx-mounted], .frame, .panel, iframe, [role="img"]';
       const box = (c) => { let t = Infinity, b = -Infinity; for (const e of [c, ...c.querySelectorAll('*')]) { if (SKIP.has(e.tagName) || isSvgPart(e)) continue; const r = e.getBoundingClientRect(); if (r.width < 2 || r.height < 2 || !shown(e, r)) continue; let q = null; if (MEDIA.has(e.tagName) || e.matches(VISQ) || (quickKind(e) && e !== c)) q = r; else if (ownText(e)) { const ls = lines(e); if (ls.length) q = { top: Math.min(...ls.map((l) => l.top)), bottom: Math.max(...ls.map((l) => l.bottom)) }; } if (!q) continue; t = Math.min(t, q.top); b = Math.max(b, q.bottom); } return isFinite(t) ? { top: t, bottom: b } : null; };
       const done = new Set();
       for (const s of S) {
@@ -9052,7 +9057,7 @@ function lib() {
     // what the page's pictures say they show: alt texts, picture labels, the objects and prints it mounts
     out.picLabels = [];
     for (const e of document.querySelectorAll('img[alt], [role="img"][aria-label], video[aria-label], video[title], [data-object], [data-print], [data-product] [aria-label], svg > title')) {
-      if (e.closest('nav, header, footer, [data-ui], .ui[class*=ui-]')) continue;
+      if (e.closest('nav, header, footer, ' + MOCK)) continue;
       const t = (e.getAttribute('alt') || e.getAttribute('aria-label') || e.getAttribute('title') || e.getAttribute('data-object') || e.getAttribute('data-print') || (e.tagName.toLowerCase() === 'title' ? e.textContent : '') || '').trim();
       if (t && out.picLabels.length < 60) out.picLabels.push(t.slice(0, 160));
     }
@@ -9063,7 +9068,7 @@ function lib() {
       if (hero) {
         out.hero = { id: idOf(hero), sel: sel(hero), text: label(hero.querySelector('h1') || hero).slice(0, 40), doc: D(hero.getBoundingClientRect()) };
         for (const e of hero.querySelectorAll('img, picture, video, canvas, [data-object], [data-print], [data-product]')) {
-          if (e.closest('nav, header.nav, [data-ui], .ui[class*=ui-]') || (e.tagName === 'IMG' && e.closest('picture'))) continue;
+          if (e.closest('nav, header.nav, ' + MOCK) || (e.tagName === 'IMG' && e.closest('picture'))) continue;
           const r = e.getBoundingClientRect(); if (r.width < 120 || r.height < 90 || !shown(e, r)) continue;
           out.heroMedia.push({ tag: e.tagName.toLowerCase(), w: Math.round(r.width), h: Math.round(r.height) });
         }
@@ -9083,7 +9088,7 @@ function lib() {
         const pct = (v, room) => /%$/.test(v) ? parseFloat(v) / 100 * room : /^-?[\d.]+px$/.test(v) ? parseFloat(v) : v === 'left' || v === 'top' ? 0 : v === 'right' || v === 'bottom' ? room : 0.5 * room;
         let best = null;
         for (const e of hero.querySelectorAll('img, video, canvas')) {
-          if (e.closest('nav, header.nav, [data-ui], .ui[class*=ui-]')) continue;
+          if (e.closest('nav, header.nav, ' + MOCK)) continue;
           const r = e.getBoundingClientRect(); if (r.width < 120 || r.height < 90 || !shown(e, r)) continue;
           const c = CS(e), n = (p) => parseFloat(c[p]) || 0;
           const pl = n('paddingLeft') + n('borderLeftWidth'), pr = n('paddingRight') + n('borderRightWidth'), pt = n('paddingTop') + n('borderTopWidth'), pb = n('paddingBottom') + n('borderBottomWidth');
@@ -9125,7 +9130,7 @@ function lib() {
         const walk = document.createTreeWalker(sc, NodeFilter.SHOW_TEXT);
         for (let t = walk.nextNode(); t; t = walk.nextNode()) {
           const p = t.parentElement; if (!p || /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|SVG|TEXTAREA)$/i.test(p.tagName)) continue;
-          if (p.closest('[data-ui], .ui[class*=ui-], [data-diagram], [role="img"], [data-fx], [data-fx-mounted], [aria-hidden="true"], svg, canvas, template, nav, [hidden], .panel__screen') || p.getClientRects().length === 0) continue;
+          if (p.closest(MOCK + ', [data-diagram], [role="img"], [data-fx], [data-fx-mounted], [aria-hidden="true"], svg, canvas, template, nav, [hidden], .panel__screen') || p.getClientRects().length === 0) continue;
           n += (t.textContent.match(/[\p{L}\p{N}][\p{L}\p{N}'.,%:-]*/gu) || []).length;
         }
         out.words.push({ id: idOf(sc), sel: sel(sc), text: label(sc.querySelector('h1, h2, h3') || sc).slice(0, 40), words: n, screens: Math.max(1, Math.round(r.height / vh * 10) / 10), doc: D(r) });
@@ -9133,7 +9138,7 @@ function lib() {
     // every action's label, counted over the page's links and buttons (a submit inside a lit frame counts too)
     out.labels = {};
     for (const e of document.querySelectorAll('a[href], button, input[type="submit"]')) {
-      if (e.closest('[data-ui], .ui[class*=ui-], [role="img"], dialog, .nav__menu, [hidden], [role="tablist"]') || !visible(e)) continue;
+      if (e.closest(MOCK + ', [role="img"], dialog, .nav__menu, [hidden], [role="tablist"]') || !visible(e)) continue;
       const k = String(e.value && e.tagName === 'INPUT' ? e.value : full(e)).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim(); if (!k || k.length > 40) continue;
       out.labels[k] = (out.labels[k] || 0) + 1;
     }
@@ -10167,8 +10172,8 @@ async function reducedPass(cdp, helper, { w: width, h }) {
 // opacity under 0.1 up its ancestors, visibility hidden, scaled to nothing, transparent letters, a clip-path that hides
 // it, or pushed out of an overflow-hidden mask by a transform (words that "rise" into view). Passed: the nav, closed
 // menus, popups, dialogs, an unopened details, aria-hidden, [hidden], inert and screen-reader-only parts, and an
-// alternate stacked under a shown sibling (a rotating word, a collage set). A drawn mock's rows ([data-ui], .ui,
-// [data-m-loop], [data-ui-loop]) are told apart. Viewport boxes, at most 40.
+// alternate stacked under a shown sibling (a rotating word, a collage set). A drawn mock's rows (MOCK, D17,
+// and its loops: [data-m-loop], [data-ui-loop]) are told apart. Viewport boxes, at most 40.
 function hiddenProbe() {
   const H = innerHeight, W = document.documentElement.clientWidth || innerWidth;
   const cs = (e) => getComputedStyle(e);
@@ -10188,7 +10193,7 @@ function hiddenProbe() {
   const alphaOf = (c) => { const m = String(c).match(/rgba?\(([^)]+)\)/); if (!m) return c === 'transparent' ? 0 : 1; const p = m[1].split(/[\s,/]+/).filter(Boolean); return p.length > 3 ? parseFloat(p[3]) : 1; };
   const EX = 'nav,.nav,header nav,[role=navigation],[aria-hidden="true"],[hidden],[inert],dialog:not([open]),template,noscript,[role=menu],[role=tooltip],[role=dialog],[role=tabpanel][aria-hidden],[class*="sr-only"],[class*="visually-hidden"],[class*="skip"]';
   const POP = /(?:^|[\s_-])(?:menu|dropdown|popover|tooltip|modal|drawer|offcanvas|lightbox|toast|mega)(?:$|[\s_-])/i;
-  const MOCK = '[data-ui],[data-ui-loop],[data-m-loop],.ui,[class*="ui-"]';
+  const MOCK = '[data-ui], .ui[class*=ui-]'; // D17: THE mock selector — a drawn mock is a [data-ui] element or a .ui root carrying ui-* classes (layout-doctrine.md §5); every mock test uses this one spelling, never a respelling // (this probe's family — a mock and its loops — is spelled out at the use)
   const shown = (e) => { let op = 1; for (let x = e; x && x !== document.documentElement; x = x.parentElement) { const s = cs(x); op *= parseFloat(s.opacity); if (s.visibility === 'hidden' || op < 0.1) return false; } return true; };
   const out = [];
   for (const el of document.body.querySelectorAll('*')) {
@@ -10227,7 +10232,7 @@ function hiddenProbe() {
     for (let a = el, d = 0; a && a.parentElement && d < 3 && !alt; a = a.parentElement, d++) for (const sib of a.parentElement.children) { if (sib === a || !shown(sib)) continue; const q = sib.getBoundingClientRect(); const ix = Math.max(0, Math.min(q.right, r.right) - Math.max(q.left, r.left)), iy = Math.max(0, Math.min(q.bottom, r.bottom) - Math.max(q.top, r.top)); if (ix * iy >= 0.5 * r.width * r.height) { alt = true; break; } }
     if (alt) continue;
     const vis = { left: Math.round(Math.max(0, r.left)), top: Math.round(Math.max(0, r.top)), width: Math.round(Math.min(W, r.right) - Math.max(0, r.left)), height: Math.round(Math.min(H, r.bottom) - Math.max(0, r.top)) };
-    out.push({ key: sel(el) + '|' + (el.textContent || '').trim().slice(0, 30), sel: sel(el), text: pic ? 'the photograph ' + String(el.currentSrc || el.getAttribute('src') || el.getAttribute('poster') || '').split(/[?#]/)[0].split('/').pop().slice(0, 40) : (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 50), why, mock: !!el.closest(MOCK), first: scrollY < 2, rect: vis });
+    out.push({ key: sel(el) + '|' + (el.textContent || '').trim().slice(0, 30), sel: sel(el), text: pic ? 'the photograph ' + String(el.currentSrc || el.getAttribute('src') || el.getAttribute('poster') || '').split(/[?#]/)[0].split('/').pop().slice(0, 40) : (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 50), why, mock: !!el.closest(MOCK + ', [data-ui-loop], [data-m-loop]'), first: scrollY < 2, rect: vis });
     if (out.length >= 40) break;
   }
   return out;
