@@ -4622,9 +4622,16 @@ for (const f of readdirSync(outDir)) if (/^(sweep-)?\d{3,4}-.+\.jpg$/.test(f)) u
 // and never looked on PATH. Candidate order below: CHROME_PATH
 // (fail-loud when set but invalid — explicit user intent, mirroring
 // crop-sections' --chrome precedent — never silently fall through to
-// a different browser) → Playwright cache → fixed system paths →
-// PATH. A candidate counts only when it is a real, executable file.
-function findChrome() {
+// a different browser) → fixed system paths → PATH → Playwright
+// cache (newest first). System locations outrank the cache: a cached
+// Chromium can be broken on a machine whose system Chrome is fine
+// (PR #3, ubuntu CI: the cached Chromium exited ~0.5s after launch
+// while the runner's system Chrome worked). A candidate counts only
+// when it is a real, executable file. Launch walks the candidates in
+// order: a DISCOVERED candidate that fails to launch is logged with
+// the tail of the browser's own stderr and the next candidate is
+// tried; an explicit CHROME_PATH that fails to launch stays loud.
+function chromeCandidates() {
   // Existence alone is not usability: a directory or a non-executable
   // file (e.g. a .zip) must be rejected HERE, with the path named, not
   // at spawn as a bare EACCES.
@@ -4654,8 +4661,31 @@ function findChrome() {
   };
   const env = process.env.CHROME_PATH;
   if (env) {
-    for (const cand of expandGlob(env)) if (usable(cand)) return cand;
+    for (const cand of expandGlob(env)) if (usable(cand)) return [{ exe: cand, explicit: true }];
     throw new Error(`CHROME_PATH is set to '${env}' but that is not an executable Chrome/Chromium binary.`);
+  }
+  const out = [];
+  const seen = new Set();
+  const add = (p) => { if (p && usable(p) && !seen.has(p)) { seen.add(p); out.push({ exe: p, explicit: false }); } };
+  const local = process.env.LOCALAPPDATA || '', pf = process.env.PROGRAMFILES || 'C:\\Program Files', pf86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)';
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+  const list = [
+    join(pf, 'Google/Chrome/Application/chrome.exe'), join(pf86, 'Google/Chrome/Application/chrome.exe'), join(local, 'Google/Chrome/Application/chrome.exe'),
+    join(pf86, 'Microsoft/Edge/Application/msedge.exe'), join(pf, 'Microsoft/Edge/Application/msedge.exe'),
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    join(home, 'Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
+    '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser', '/snap/bin/chromium',
+    '/opt/google/chrome/chrome',
+  ];
+  for (const cand of list) add(cand);
+  // PATH lookup (POSIX only — the fixed list above covers Windows).
+  if (process.platform !== 'win32') {
+    for (const name of ['chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable']) {
+      try {
+        const r = spawnSync('sh', ['-c', `command -v ${name}`], { encoding: 'utf8' });
+        if (r.status === 0 && r.stdout) add(r.stdout.trim());
+      } catch { /* not on PATH — try the next name */ }
+    }
   }
   // Playwright browser cache (the kit installs Chromium here — see
   // install.sh for the per-OS roots and the chrome-mac-* layouts).
@@ -4671,38 +4701,17 @@ function findChrome() {
     try { entries = readdirSync(root); } catch { continue; }
     for (const dir of entries.sort().reverse()) {
       for (const sub of cacheSubs) {
-        const cand = join(root, dir, sub);
-        if (usable(cand)) return cand;
+        add(join(root, dir, sub));
       }
     }
   }
-  const local = process.env.LOCALAPPDATA || '', pf = process.env.PROGRAMFILES || 'C:\\Program Files', pf86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)';
-  const home = process.env.HOME || process.env.USERPROFILE || '';
-  const list = [
-    join(pf, 'Google/Chrome/Application/chrome.exe'), join(pf86, 'Google/Chrome/Application/chrome.exe'), join(local, 'Google/Chrome/Application/chrome.exe'),
-    join(pf86, 'Microsoft/Edge/Application/msedge.exe'), join(pf, 'Microsoft/Edge/Application/msedge.exe'),
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    join(home, 'Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
-    '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser', '/snap/bin/chromium',
-    '/opt/google/chrome/chrome',
-  ];
-  const fixed = list.find((c) => c && usable(c));
-  if (fixed) return fixed;
-  // PATH lookup (POSIX only — the fixed list above covers Windows).
-  if (process.platform !== 'win32') {
-    for (const name of ['chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable']) {
-      try {
-        const r = spawnSync('sh', ['-c', `command -v ${name}`], { encoding: 'utf8' });
-        if (r.status === 0 && r.stdout && usable(r.stdout.trim())) return r.stdout.trim();
-      } catch { /* not on PATH — try the next name */ }
-    }
-  }
-  return null;
+  return out;
 }
-async function launch() {
-  if (typeof WebSocket === 'undefined') throw new Error('Node 22+ is required (no built-in WebSocket in ' + process.version + ')');
-  const exe = findChrome();
-  if (!exe) throw new Error('No Chrome, Edge or Chromium found — searched CHROME_PATH, ~/.cache/ms-playwright and ~/Library/Caches/ms-playwright, the system Chrome/Edge paths, and chromium / chromium-browser / google-chrome / google-chrome-stable on PATH. Install the kit browser with ./install.sh (Playwright CLI + browser) or set CHROME_PATH=$HOME/.cache/ms-playwright/chromium-*/chrome-linux64/chrome.');
+function findChrome() {
+  const cands = chromeCandidates();
+  return cands.length ? cands[0].exe : null;
+}
+async function tryLaunch(exe) {
   const dir = join(PROFILE, `run-${process.pid}-${Date.now().toString(36)}`);
   mkdirSync(dir, { recursive: true });
   // Chrome refuses to run as root without --no-sandbox: add it only when
@@ -4738,16 +4747,53 @@ async function launch() {
     stopped = true;
     for (let i = 0; i < 40 && existsSync(dir); i++) { try { rmSync(dir, { recursive: true, force: true }); } catch {} if (existsSync(dir)) await sleep(250); }
   };
-  process.once('exit', stop);
-  for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.once(s, () => { stop(); process.exit(130); });
-  const ws = await new Promise((res, rej) => {
-    let buf = '';
-    // a busy machine (several builders, WebGL on the CPU) can take long to start Chrome: wait 60s
-    const t = setTimeout(() => rej(new Error('Chrome did not start within 60s')), 60000);
-    proc.stderr.on('data', (d) => { buf += d; const m = buf.match(/DevTools listening on (ws:\/\/\S+)/); if (m) { clearTimeout(t); res(m[1]); } });
-    proc.once('exit', (c) => { clearTimeout(t); rej(new Error('Chrome exited early (' + c + ')')); });
-  }).catch((e) => { stop(); throw e; });
-  return { ws, pid, stop, close };
+  const onExit = () => stop();
+  process.once('exit', onExit);
+  const onSignal = () => { stop(); process.exit(130); };
+  for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.once(s, onSignal);
+  try {
+    const ws = await new Promise((res, rej) => {
+      let buf = '';
+      // the browser's own stderr, kept as a capped tail: when a launch
+      // fails, its tail says WHY (a bare "Chrome exited early (null)"
+      // hid the ubuntu CI failure behind a null exit code).
+      let errTail = '';
+      const tail = () => errTail.trimEnd().slice(-2000);
+      // a busy machine (several builders, WebGL on the CPU) can take long to start Chrome: wait 60s
+      const t = setTimeout(() => rej(new Error('Chrome did not start within 60s' + (tail() ? '; browser stderr tail:\n' + tail() : ''))), 60000);
+      proc.stderr.on('data', (d) => { const s = String(d); errTail = (errTail + s).slice(-32768); buf += s; const m = buf.match(/DevTools listening on (ws:\/\/\S+)/); if (m) { clearTimeout(t); res(m[1]); } });
+      proc.once('exit', (c) => { clearTimeout(t); rej(new Error('Chrome exited early (' + c + ')' + (tail() ? '; browser stderr tail:\n' + tail() : ''))); });
+      proc.once('error', (e) => { clearTimeout(t); rej(new Error('Chrome could not be spawned: ' + e.message + (tail() ? '; browser stderr tail:\n' + tail() : ''))); });
+    });
+    return { ws, pid, stop, close };
+  } catch (e) {
+    process.removeListener('exit', onExit);
+    for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.removeListener(s, onSignal);
+    stop();
+    throw e;
+  }
+}
+async function launch() {
+  if (typeof WebSocket === 'undefined') throw new Error('Node 22+ is required (no built-in WebSocket in ' + process.version + ')');
+  const cands = chromeCandidates();
+  if (!cands.length) throw new Error('No Chrome, Edge or Chromium found — searched CHROME_PATH, the system Chrome/Edge paths, chromium / chromium-browser / google-chrome / google-chrome-stable on PATH, and ~/.cache/ms-playwright and ~/Library/Caches/ms-playwright. Install the kit browser with ./install.sh (Playwright CLI + browser) or set CHROME_PATH=$HOME/.cache/ms-playwright/chromium-*/chrome-linux64/chrome.');
+  const failures = [];
+  for (const cand of cands) {
+    // log the pick BEFORE the attempt, so CI logs always show which
+    // binary a run used — and which ones it fell through.
+    console.error(`consistency: launching Chrome: ${cand.exe}`);
+    try { return await tryLaunch(cand.exe); }
+    catch (e) {
+      // An explicit CHROME_PATH is the user's own choice: a set-but-
+      // crashing binary stays loud, exactly like a set-but-invalid one
+      // at discovery — it never falls through to a different browser.
+      if (cand.explicit) throw e;
+      failures.push(`${cand.exe}: ${e.message}`);
+      console.error(`consistency: ${cand.exe} failed to launch: ${e.message}`);
+      if (cand !== cands[cands.length - 1]) console.error('consistency: trying the next Chrome candidate');
+    }
+  }
+  throw new Error('Chrome was found but no candidate would launch:\n' + failures.join('\n'));
 }
 
 class CDP {
