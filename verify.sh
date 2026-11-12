@@ -2001,22 +2001,19 @@ else
   if [[ -f "$rl_proj/design/tokens.real" ]]; then mv "$rl_proj/design/tokens.real" "$rl_proj/design/tokens.css"; fi
   fail "run-log refusal (D13): setup failed for the directory-tokens.css --page case — could not replace design/tokens.css with a directory"
 fi
-# (48) S2 --page design/..html (fix round 4): basename 6, stem "." — a
-# real .html file in design/ with the freshness chain intact → exit 0,
-# stored "page":"design/..html".
+# (48) S2 --page design/..html (fix round 4 blessed it; M2 reverses
+# that blessing): basename 6, but the stem before `.html` is just "."
+# — not a name, so it is not a built page → exit 2, nothing written.
 rl_reset_artifacts
 printf '<html>dd</html>\n' > "$rl_proj/design/..html"
 touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/..html"
 rl_before="$(rl_lines)"
 if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/..html >"$work/runlog-t48.log" 2>&1; then
-  if [[ "$(rl_lines)" == "$((rl_before + 1))" ]] && tail -n 1 "$rl_log" | grep -q '"page":"design/..html"'; then
-    ok "run-log records record --gate pass with --page design/..html (exit 0, stored page design/..html)"
-  else
-    fail "run-log refusal (D13): record --gate pass with --page design/..html exited 0 but did not store the canonical page"
-  fi
+  fail "run-log refusal (D13): record --gate pass with --page design/..html exited 0 — a dot-only stem before .html is not a built page (exit 2)"
+elif [[ "$(rl_lines)" != "$rl_before" ]]; then
+  fail "run-log refusal (D13): record --gate pass with --page design/..html wrote to the run log — a refused entry must write nothing"
 else
-  fail "run-log refusal (D13): record --gate pass with --page design/..html failed — a real .html file in design/ is a built page (exit 0); see $work/runlog-t48.log"
-  cat "$work/runlog-t48.log" >&2 || true
+  ok "run-log refuses record --gate pass with --page design/..html (exit 2, nothing written)"
 fi
 rm -f "$rl_proj/design/..html"
 # (49) S2 --page design/a.html plus a trailing space (fix round 4): the
@@ -2048,22 +2045,20 @@ else
   ok "run-log refuses record --gate pass with --page design/.HTML (exit 2, nothing written)"
 fi
 rm -f "$rl_proj/design/.HTML"
-# (51) S2 --page design/x.html.html (fix round 4): double extension —
-# ends with ".html", basename 10 → exit 0, stored canonically as
-# "page":"design/x.html.html".
+# (51) S2 --page design/x.html.html (fix round 4 blessed it; M2
+# reverses that blessing): a double extension — the stem "x.html"
+# itself ends in ".html", so it is not a single-suffix built page →
+# exit 2, nothing written.
 rl_reset_artifacts
 printf '<html>de</html>\n' > "$rl_proj/design/x.html.html"
 touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/x.html.html"
 rl_before="$(rl_lines)"
 if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/x.html.html >"$work/runlog-t51.log" 2>&1; then
-  if [[ "$(rl_lines)" == "$((rl_before + 1))" ]] && tail -n 1 "$rl_log" | grep -q '"page":"design/x.html.html"'; then
-    ok "run-log records record --gate pass with --page design/x.html.html (exit 0, stored page design/x.html.html)"
-  else
-    fail "run-log refusal (D13): record --gate pass with --page design/x.html.html exited 0 but did not store the canonical page"
-  fi
+  fail "run-log refusal (D13): record --gate pass with --page design/x.html.html exited 0 — a double extension is not a built page (exit 2)"
+elif [[ "$(rl_lines)" != "$rl_before" ]]; then
+  fail "run-log refusal (D13): record --gate pass with --page design/x.html.html wrote to the run log — a refused entry must write nothing"
 else
-  fail "run-log refusal (D13): record --gate pass with --page design/x.html.html failed — a double extension ending in .html is a built page (exit 0); see $work/runlog-t51.log"
-  cat "$work/runlog-t51.log" >&2 || true
+  ok "run-log refuses record --gate pass with --page design/x.html.html (exit 2, nothing written)"
 fi
 rm -f "$rl_proj/design/x.html.html"
 # (52) S2 --page design/html (fix round 4): a file named exactly "html",
@@ -2379,22 +2374,20 @@ else
   if [[ -f "$rl_proj/design/tokens.real" ]]; then mv "$rl_proj/design/tokens.real" "$rl_proj/design/tokens.css"; fi
   fail "run-log refusal (D13): setup failed for the FIFO-tokens.css land case — could not replace design/tokens.css with a FIFO"
 fi
-# (70) Land variant of (48) (fix round 5): --page design/..html on `land`
-# → exit 0, stored "page":"design/..html".
+# (70) Land variant of (48) (fix round 5 blessed it; M2 reverses
+# that blessing): --page design/..html on `land` → exit 2, nothing
+# written.
 rl_reset_artifacts
 printf '<html>dd</html>\n' > "$rl_proj/design/..html"
 touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/..html"
 if node "$run_log_mjs" --project "$rl_proj" crosscheck --slice d12-test --severe 0 --warning 0 --report design/cc.md --checker security-expert --basis "fresh context, no production history" >"$work/runlog-t70-cc.log" 2>&1; then
   rl_before="$(rl_lines)"
   if node "$run_log_mjs" --project "$rl_proj" land --slice d12-test --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/..html >"$work/runlog-t70.log" 2>&1; then
-    if [[ "$(rl_lines)" == "$((rl_before + 1))" ]] && tail -n 1 "$rl_log" | grep -q '"page":"design/..html"'; then
-      ok "run-log records land --gate pass with --page design/..html (exit 0, stored page design/..html)"
-    else
-      fail "run-log refusal (D13): land --gate pass with --page design/..html exited 0 but did not store the canonical page"
-    fi
+    fail "run-log refusal (D13): land --gate pass with --page design/..html exited 0 — a dot-only stem before .html is not a built page (exit 2)"
+  elif [[ "$(rl_lines)" != "$rl_before" ]]; then
+    fail "run-log refusal (D13): land --gate pass with --page design/..html wrote to the run log — a refused entry must write nothing"
   else
-    fail "run-log refusal (D13): land --gate pass with --page design/..html failed — a real .html file in design/ is a built page (exit 0); see $work/runlog-t70.log"
-    cat "$work/runlog-t70.log" >&2 || true
+    ok "run-log refuses land --gate pass with --page design/..html (exit 2, nothing written)"
   fi
 else
   fail "run-log refusal (D13): setup cross-check failed for the --page design/..html land case — see $work/runlog-t70-cc.log"
@@ -2636,6 +2629,82 @@ elif ! grep -q "contains its leg's FAIL verdict" "$work/runlog-t83.log"; then
   cat "$work/runlog-t83.log" >&2 || true
 else
   ok "run-log refuses record --gate pass with a U+13441 FAIL line alongside a real PASS line (exit 2, FAIL-verdict message, nothing written)"
+fi
+# (84) M2 edge case 3 — --page design/../design/page.html: a ".." that
+# cancels out and resolves back inside design/ is invisible after
+# path.resolve, so the raw spelling must be refused → exit 2, nothing
+# written. (The stored path would have come out canonicalised, leaving
+# no trace of the evasion.)
+printf '<html><body><main id="main">x</main></body></html>\n' > "$rl_proj/design/page.html"
+touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+rl_reset_artifacts
+rl_before="$(rl_lines)"
+if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/../design/page.html >"$work/runlog-t84.log" 2>&1; then
+  fail "run-log refusal (D13): record --gate pass with --page design/../design/page.html exited 0 — a '..' segment in a cited path must be refused (exit 2)"
+elif [[ "$(rl_lines)" != "$rl_before" ]]; then
+  fail "run-log refusal (D13): record --gate pass with --page design/../design/page.html wrote to the run log — a refused entry must write nothing"
+else
+  ok "run-log refuses record --gate pass with --page design/../design/page.html (exit 2, nothing written)"
+fi
+# (85) M2 edge case 3, mid-path variant — --page design/sub/../page.html
+# (a ".." after a real segment, still resolving inside design/) → exit 2,
+# nothing written.
+printf '<html><body><main id="main">x</main></body></html>\n' > "$rl_proj/design/page.html"
+touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+rl_reset_artifacts
+rl_before="$(rl_lines)"
+if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/sub/../page.html >"$work/runlog-t85.log" 2>&1; then
+  fail "run-log refusal (D13): record --gate pass with --page design/sub/../page.html exited 0 — a '..' segment in a cited path must be refused (exit 2)"
+elif [[ "$(rl_lines)" != "$rl_before" ]]; then
+  fail "run-log refusal (D13): record --gate pass with --page design/sub/../page.html wrote to the run log — a refused entry must write nothing"
+else
+  ok "run-log refuses record --gate pass with --page design/sub/../page.html (exit 2, nothing written)"
+fi
+# (86) M2 edge case 3, "." variant — --page design/./page.html → exit 2,
+# nothing written. (A "." segment is the same non-canonical spelling
+# class as ".."; the plain spelling design/page.html is the accepted form.)
+printf '<html><body><main id="main">x</main></body></html>\n' > "$rl_proj/design/page.html"
+touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+rl_reset_artifacts
+rl_before="$(rl_lines)"
+if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/./page.html >"$work/runlog-t86.log" 2>&1; then
+  fail "run-log refusal (D13): record --gate pass with --page design/./page.html exited 0 — a '.' segment in a cited path must be refused (exit 2)"
+elif [[ "$(rl_lines)" != "$rl_before" ]]; then
+  fail "run-log refusal (D13): record --gate pass with --page design/./page.html wrote to the run log — a refused entry must write nothing"
+else
+  ok "run-log refuses record --gate pass with --page design/./page.html (exit 2, nothing written)"
+fi
+# (87) M2 edge case 3 on a leg — --gate-leg1 design/../design/gate-leg1.log
+# (the same ".." hole in the leg loop, not only --page) → exit 2, nothing
+# written.
+printf '<html><body><main id="main">x</main></body></html>\n' > "$rl_proj/design/page.html"
+touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+rl_reset_artifacts
+rl_before="$(rl_lines)"
+if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/../design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/page.html >"$work/runlog-t87.log" 2>&1; then
+  fail "run-log refusal (D13): record --gate pass with --gate-leg1 design/../design/gate-leg1.log exited 0 — a '..' segment in a cited path must be refused (exit 2)"
+elif [[ "$(rl_lines)" != "$rl_before" ]]; then
+  fail "run-log refusal (D13): record --gate pass with --gate-leg1 design/../design/gate-leg1.log wrote to the run log — a refused entry must write nothing"
+else
+  ok "run-log refuses record --gate pass with --gate-leg1 design/../design/gate-leg1.log (exit 2, nothing written)"
+fi
+# (88) Land variant of (84) — --page design/../design/page.html on `land`
+# → exit 2, nothing written.
+printf '<html><body><main id="main">x</main></body></html>\n' > "$rl_proj/design/page.html"
+touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+rl_reset_artifacts
+if node "$run_log_mjs" --project "$rl_proj" crosscheck --slice d12-test --severe 0 --warning 0 --report design/cc.md --checker security-expert --basis "fresh context, no production history" >"$work/runlog-t88-cc.log" 2>&1; then
+  rl_before="$(rl_lines)"
+  if node "$run_log_mjs" --project "$rl_proj" land --slice d12-test --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/../design/page.html >"$work/runlog-t88.log" 2>&1; then
+    fail "run-log refusal (D13): land --gate pass with --page design/../design/page.html exited 0 — a '..' segment in a cited path must be refused (exit 2)"
+  elif [[ "$(rl_lines)" != "$rl_before" ]]; then
+    fail "run-log refusal (D13): land --gate pass with --page design/../design/page.html wrote to the run log — a refused entry must write nothing"
+  else
+    ok "run-log refuses land --gate pass with --page design/../design/page.html (exit 2, nothing written)"
+  fi
+else
+  fail "run-log refusal (D13): setup cross-check failed for the --page design/../design/page.html land case — see $work/runlog-t88-cc.log"
+  cat "$work/runlog-t88-cc.log" >&2 || true
 fi
 
 # --- 5c. run-log judge-artifact mechanism (D15, GAP-13) --------------------
@@ -4927,6 +4996,23 @@ elif [[ "$(grep -c . "$r3p/design/run-log.jsonl")" != "$r10_lines_before" ]]; th
 else
   ok "the deadlocked state is split: runlog-check passes the genuine round-1 log after leg rotation while feedback and land still refuse the rotated round on leg currency (live-proof round 2)"
 fi
+
+# (106) M2 prepare parity — judge-report.mjs prepare applies the SAME
+# --page rules record time applies (it claims parity in its own
+# comment), so prepare must refuse the D13 edge-case spellings too,
+# writing no skeleton: --page design/..html (dot-only stem),
+# design/x.html.html (double extension), and
+# design/../design/page.html (a ".." that cancels out). Round 13 is
+# otherwise unused in §5c, so no round-13.md may appear.
+for bad_page in "design/..html" "design/x.html.html" "design/../design/page.html"; do
+  if node "$judge_report_mjs" --project "$jr_proj" prepare --round 13 --kind absolute --grader judge-subagent --brief-type landing --mode full --page "$bad_page" >"$work/judge-prep-13-bad.log" 2>&1; then
+    fail "judge-artifact (D15): prepare with --page $bad_page exited 0 — prepare must refuse the D13 edge-case spellings (exit 2)"
+  elif [[ -f "$jr_proj/design/judge/round-13.md" ]]; then
+    fail "judge-artifact (D15): prepare with --page $bad_page wrote design/judge/round-13.md — a refused prepare must write nothing"
+  else
+    ok "judge-report prepare refuses --page $bad_page (exit 2, nothing written)"
+  fi
+done
 
 
 # --- 6. Playwright eyes ------------------------------------------------------
