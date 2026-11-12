@@ -477,6 +477,22 @@ function reject(msg) {
   process.exit(2);
 }
 
+// M2 (D13 edge cases, 2026-11-12): a cited CLI path is a SPELLING, not
+// just a resolution. path.resolve() lexically collapses "." and ".."
+// segments before any containment check sees the input, so a ".." that
+// cancels out (design/../design/x.html, design/sub/../x.html) was
+// invisible to every check and the stored path came out canonicalised,
+// leaving no trace — while the error text still claimed "'..' escapes
+// are rejected". A cited path must therefore spell a plain
+// project-relative path: no "." or ".." segment anywhere in the raw
+// string, checked BEFORE resolve. Trailing slashes stay allowed (pinned
+// by §5b case (32)); the existing realpath/inside checks still catch
+// symlinks and mounts. Callers pass their own fail function: reject()
+// on the pass path, pageFail() for --page (warn-only on --gate fail).
+function hasDotSegment(given) {
+  return String(given).split(/[\\/]/).some((s) => s === '.' || s === '..');
+}
+
 // Independence basis must establish BOTH halves (see header): (1) fresh /
 // separate context, or a different agent instance; AND (2) no production
 // history of the build. Either half alone is rejected — "fresh context"
@@ -801,6 +817,7 @@ function validateGateArtifacts(project, args) {
       const given = args[flag];
       if (!given) reject(`--gate pass needs --${flag} <path> (the ${legName} output file under design/). A gate pass with no artifact is a self-assertion, not a record.`);
       if (path.isAbsolute(given)) reject(`--${flag} must be a path relative to the project, inside design/ — absolute paths are rejected (got "${given}").`);
+      if (hasDotSegment(given)) reject(`--${flag} must be a plain project-relative path inside design/ — "." and ".." segments are rejected (got "${given}").`);
       const resolved = path.resolve(project, given);
       if (resolved !== designDir && !resolved.startsWith(designDir + path.sep)) reject(`--${flag} must resolve inside <project>/design/ (got "${given}" — '..' escapes are rejected).`);
       let lstat;
@@ -881,6 +898,10 @@ function validateGateArtifacts(project, args) {
     const pageFail = (msg) => { if (args.gate === 'fail') throw new Error(msg); reject(msg); };
     try {
       const given = args.page;
+      // M2 (D13 edge case 3): a ".." that cancels out
+      // (design/../design/x.html) is invisible after resolve — reject
+      // "." / ".." segments in the raw spelling, before resolve.
+      if (hasDotSegment(given)) pageFail(`--page ${given} must be a plain project-relative path inside <project>/design/ — "." and ".." segments are rejected.`);
       const resolved = path.resolve(project, given);
       let lstat;
       try { lstat = fs.lstatSync(resolved); } catch { pageFail(`--page file does not exist: ${given} (the built page of this project).`); }
@@ -912,11 +933,17 @@ function validateGateArtifacts(project, args) {
       const isTokensRef = resolved === tokensPath || real === tokensReal || sameFile(stat, tokensStat);
       if (!isTokensRef) {
         if (!inside(real, designReal)) pageFail(`--page ${given} must resolve inside <project>/design/ — the freshness reference is the built page (got "${given}").`);
-        // Fix round 3 (S2): the basename must have at least one
-        // character before `.html` — a dotfile named exactly `.html`
-        // is not a built page. The extension stays case-insensitive
-        // (uppercase `.HTML` is HTML and still passes).
-        if (!real.toLowerCase().endsWith('.html') || path.basename(real).length <= 5) pageFail(`--page ${given} must be an .html file inside <project>/design/ — the freshness reference is the built page (got "${given}").`);
+        // Fix round 3 (S2) + M2 (D13 edge cases 1–2): the basename
+        // needs a REAL stem before a SINGLE `.html` suffix. The old
+        // length-only check (`basename.length > 5`) let through
+        // `..html` (stem ".", no name at all) and `x.html.html`
+        // (stem "x.html", a double extension). The stem must contain
+        // at least one non-dot character and must not itself end in
+        // `.html`. The extension stays case-insensitive (uppercase
+        // `.HTML` is HTML and still passes).
+        const pageBase = path.basename(real);
+        const pageStem = pageBase.slice(0, -5);
+        if (!pageBase.toLowerCase().endsWith('.html') || !/[^.]/.test(pageStem) || pageStem.toLowerCase().endsWith('.html')) pageFail(`--page ${given} must be an .html file inside <project>/design/ — the freshness reference is the built page (got "${given}").`);
       }
       // R3 anchor (pass path only): the reference must be at least as
       // new as tokens.css — the enforced chain is
@@ -1122,6 +1149,7 @@ function validateJudgeArtifact(project, given, expect) {
   const inside = (realPath, realDir) => realPath === realDir || realPath.startsWith(realDir + path.sep);
   if (!inside(designReal, projectReal)) reject(`<project>/design/ resolves outside the project (real path ${designReal}) — a design/ directory outside the project cannot hold judge artifacts.`);
   if (path.isAbsolute(given)) reject(`${flag} must be a path relative to the project, inside design/ — absolute paths are rejected (got "${given}").`);
+  if (hasDotSegment(given)) reject(`${flag} must be a plain project-relative path inside design/ — "." and ".." segments are rejected (got "${given}").`);
   const resolved = path.resolve(project, given);
   if (resolved !== designDir && !resolved.startsWith(designDir + path.sep)) reject(`${flag} must resolve inside <project>/design/ (got "${given}" — '..' escapes are rejected).`);
   let lstat;
@@ -1252,6 +1280,7 @@ function validateCrosscheckReport(project, given) {
   const inside = (realPath, realDir) => realPath === realDir || realPath.startsWith(realDir + path.sep);
   if (!inside(designReal, projectReal)) reject(`<project>/design/ resolves outside the project (real path ${designReal}) — a design/ directory outside the project cannot hold a cross-check report.`);
   if (path.isAbsolute(given)) reject(`--report must be a path relative to the project, inside design/ — absolute paths are rejected (got "${given}").`);
+  if (hasDotSegment(given)) reject(`--report must be a plain project-relative path inside design/ — "." and ".." segments are rejected (got "${given}").`);
   const resolved = path.resolve(project, given);
   if (resolved !== designDir && !resolved.startsWith(designDir + path.sep)) reject(`--report must resolve inside <project>/design/ (got "${given}" — '..' escapes are rejected).`);
   let lstat;

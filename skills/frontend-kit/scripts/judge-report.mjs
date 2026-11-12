@@ -1743,6 +1743,11 @@ function prepare(project, args) {
   const tokensSha = sha256File(tokensPath);
   const pageGiven = args.page;
   if (path.isAbsolute(pageGiven)) refuse('--page must be a path relative to the project, inside design/ — absolute paths are rejected.');
+  // M2 (D13 edge cases, same rules as run-log.mjs record time): no "."
+  // or ".." segments in the raw spelling (a ".." that cancels out is
+  // invisible after resolve), and the basename needs a real stem before
+  // a single ".html" suffix — "..html" and "x.html.html" are refused.
+  if (String(pageGiven).split(/[\\/]/).some((s) => s === '.' || s === '..')) refuse(`--page ${pageGiven} must be a plain project-relative path inside <project>/design/ — "." and ".." segments are rejected.`);
   const pageResolved = path.resolve(project, pageGiven);
   let pageLstat;
   try { pageLstat = fs.lstatSync(pageResolved); } catch { refuse(`--page file does not exist: ${pageGiven}.`); }
@@ -1754,7 +1759,9 @@ function prepare(project, args) {
   const isTokensRef = pageResolved === tokensPath;
   if (!isTokensRef) {
     if (!inside(pageReal, designReal)) refuse(`--page ${pageGiven} must resolve inside <project>/design/ — the graded page lives there.`);
-    if (!pageReal.toLowerCase().endsWith('.html') || path.basename(pageReal).length <= 5) refuse(`--page ${pageGiven} must be an .html file inside <project>/design/.`);
+    const pageBase = path.basename(pageReal);
+    const pageStem = pageBase.slice(0, -5);
+    if (!pageBase.toLowerCase().endsWith('.html') || !/[^.]/.test(pageStem) || pageStem.toLowerCase().endsWith('.html')) refuse(`--page ${pageGiven} must be an .html file inside <project>/design/.`);
   }
   if (pageStat.mtimeMs < tokensStat.mtimeMs) refuse(`--page ${pageGiven} is older than design/tokens.css — a page older than the locked tokens is a different build. Rebuild first.`);
   const pageRel = path.relative(projectReal, pageReal);
