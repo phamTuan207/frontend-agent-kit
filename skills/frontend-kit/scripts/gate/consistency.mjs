@@ -4944,7 +4944,31 @@ const IO_HOOK = `(() => {
               const host = hits.find((h) => h === t || h.contains(t)); if (!host) continue;
               const tm = a.effect.getComputedTiming(); if (tm.iterations === Infinity || !(tm.duration > 0)) continue;
               if ((a.currentTime || 0) > 500) continue;
-              S.list.push({ host, target: t, name: a.animationName || a.transitionProperty || 'an animation', dur: tm.duration, it: tm.iterations, y: scrollY });
+              // D16: the animation's keyframes, summarised — the scroll-reveal check reads them to tell a
+              // Pattern 5 reveal (a fade and/or a rise of 24px at most, nothing else) from any other reveal
+              let kf = null;
+              try {
+                const fr = a.effect.getKeyframes() || [];
+                if (fr.length >= 2) {
+                  const props = new Set(); let o0 = null, o1 = null, ty = 0, other = false;
+                  for (const k of fr) for (const pn of Object.keys(k)) if (!/^(offset|composite|easing|computedOffset)$/.test(pn)) props.add(pn);
+                  const os = fr.map((k) => k.opacity).filter((v) => v != null).map(Number);
+                  if (os.length) { o0 = os[0]; o1 = os[os.length - 1]; }
+                  for (const k of fr) {
+                    const tf = k.transform; if (!tf || tf === 'none') continue;
+                    for (const m of String(tf).matchAll(/([a-zA-Z0-9]+)\(([^)]*)\)/g)) {
+                      const ns = (m[2].match(/-?[\d.]+/g) || []).map(Number);
+                      if (m[1] === 'translateY') ty = Math.max(ty, Math.abs(ns[0] || 0));
+                      else if (m[1] === 'translate' || m[1] === 'translate3d') { if (Math.abs(ns[0] || 0) > 2) other = true; ty = Math.max(ty, Math.abs(ns[1] || 0)); }
+                      else if (m[1] === 'matrix') { if (Math.abs((ns[0] ?? 1) - 1) > 0.01 || Math.abs(ns[1] || 0) > 0.01 || Math.abs(ns[2] || 0) > 0.01 || Math.abs((ns[3] ?? 1) - 1) > 0.01 || Math.abs(ns[4] || 0) > 2) other = true; ty = Math.max(ty, Math.abs(ns[5] || 0)); }
+                      else if (m[1] === 'matrix3d') { if (Math.abs((ns[0] ?? 1) - 1) > 0.01 || Math.abs((ns[5] ?? 1) - 1) > 0.01 || Math.abs((ns[10] ?? 1) - 1) > 0.01 || Math.abs(ns[12] || 0) > 2) other = true; ty = Math.max(ty, Math.abs(ns[13] || 0)); }
+                      else other = true;
+                    }
+                  }
+                  kf = { props: [...props], o0, o1, ty: Math.round(ty * 10) / 10, other };
+                }
+              } catch (e) {}
+              S.list.push({ host, target: t, name: a.animationName || a.transitionProperty || 'an animation', dur: tm.duration, it: tm.iterations, y: scrollY, kf });
             }
           } catch (e) {}
         }, 90);
@@ -7090,6 +7114,29 @@ function lib() {
     if (!w.length) w.push(p.n !== v.n ? 'is split into lines that rise in' : 'changes');
     return w.join(', ');
   }
+  // D16: Pattern 5 (scroll-motion.md) — the one reveal a section may keep: a fade (from opacity 0) and/or a rise
+  // of at most 24px, ending at rest, and nothing else: no drop, slide, turn, scale, unmask, unblur, colour or
+  // text change, and no split into lines. Judged on the same before/after looks revealHow reads. That it plays
+  // once is read as far as the walk can see it: the part is at rest when the walk leaves it (a reveal that
+  // replays re-hides, so its last look is not the resting one the next reveal starts from)
+  function pattern5(p, v) {
+    if (p.n !== v.n) return false; // split into lines: not one part rising
+    const tr = (x) => { const n = [...x.ind.split('|')[0].matchAll(/(-?[\d.]+)px/g)].map((m) => +m[1]); return [x.tx + (n[0] || 0), x.ty + (n[1] || 0)]; };
+    const [px, py] = tr(p), [qx, qy] = tr(v), dy = py - qy, dx = px - qx;
+    const faded = v.o - p.o >= 0.1;
+    if (faded && p.o > 0.1) return false; // the recipe fades from 0, not from half-shown
+    if (!faded && Math.abs(v.o - p.o) > 0.01) return false;
+    if (dy < -1 || dy > 24) return false; // a rise of 24px at most, never a drop
+    if (Math.abs(dx) >= 3) return false; // no sideways slide
+    if (Math.abs(qx) > 1 || Math.abs(qy) > 1) return false; // it comes to rest where it belongs
+    if (Math.abs(v.o - 1) > 0.01) return false; // and fully shown
+    const d = vdist(p, v);
+    if (d.non > 0.01 || d.cp >= 0.05 || d.f !== 0 || d.st !== 0) return false; // no turn/scale, unmask, unblur, recolour or retype
+    const ind = (x, i) => nums(x.ind.split('|')[i]);
+    if (ind(p, 1).some((a) => Math.abs(a) > 0.5) || ind(v, 1).some((a) => Math.abs(a) > 0.5)) return false; // rotate props
+    if (ind(p, 2).some((a) => Math.abs(a - 1) > 0.02) || ind(v, 2).some((a) => Math.abs(a - 1) > 0.02)) return false; // scale props
+    return faded || dy >= 3; // it actually faded or rose (a bare class change is no reveal)
+  }
   // one finding per section: the outermost part that animated in (a card, a heading whose lines rose), and how
   function revealList() {
     const subj = new Map();
@@ -7116,15 +7163,17 @@ function lib() {
       list.sort((a, b) => (a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
       const best = list.flatMap((q) => q.xs).sort((a, b) => b.gain - a.gain)[0];
       out.push({ id: idOf(list[0].el), sel: sel(list[0].el), text: label(list[0].el), n: list.length, how: revealHow(best.p, best.v),
+        p5: list.length === 1 && list[0].xs.every((x) => pattern5(x.p, x.v)), sec: secIndex(list[0].el),
         sels: list.slice(0, 5).map((q) => sel(q.el).split(' > ').pop()), docs: list.slice(0, 8).map((q) => D(q.el.getBoundingClientRect())) });
     }
     return out;
   }
   // animations an IntersectionObserver started as their box came on screen (IO_HOOK), one per box; a UI fragment's own
   // loop and a ground's short fade as it mounts are not this
-  function ioReveals(skip) {
+  function ioReveals(skip, usedSecs) {
     const S0 = window.__ccio; if (!S0) return [];
-    const out = [], told = new Set(skip || []);
+    const out = [], told = new Set(skip || []), used = new Set(usedSecs || []);
+    const byHost = new Map(); // host element -> its records, in the order the hook saw them
     for (const x of S0.list) {
       // (a fragment that re-renders its rows leaves the animated row detached: judged by where its host sits)
       if (!x.host.isConnected || !x.target.isConnected || x.target.closest(FRAG + ', [data-ui-loop], [data-m-loop]') || x.host.closest(FRAG + ', [data-ui-loop], [data-m-loop]')) continue;
@@ -7137,10 +7186,24 @@ function lib() {
       // excuses nothing
       { const en = x.target.closest('[data-enter]:not([data-enter="off"])');
         if (en && secIndex(en) === 0 && x.target.getBoundingClientRect().top + scrollY < innerHeight && x.dur * Math.max(1, x.it || 1) <= 1200) continue; }
-      const hid = idOf(x.host); if (told.has(hid) || [...told].some((i) => { const e = els.get(i); return e && (e.contains(x.host) || x.host.contains(e)); })) continue;
+      if (!byHost.has(x.host)) byHost.set(x.host, []);
+      byHost.get(x.host).push(x);
+    }
+    // D16: a host whose animations are ALL Pattern 5 — the hook's keyframe summary shows a fade (from opacity
+    // 0) and/or a rise of 24px at most and nothing else, each played once — is the section's one allowed
+    // reveal, unless the section already spent it: a second host here, or a style-snapshot reveal the caller
+    // carved out (usedSecs). An animation whose keyframes the hook could not read earns no carve-out.
+    const p5kf = (kf) => !!kf && kf.props.every((pn) => pn === 'opacity' || pn === 'transform') && (kf.o0 == null || (kf.o0 <= 0.1 && kf.o1 >= 0.99)) && !kf.other && kf.ty <= 24 && (kf.o0 != null || kf.ty >= 3);
+    const hostsBySec = new Map();
+    for (const h of byHost.keys()) { const k = secIndex(h); if (!hostsBySec.has(k)) hostsBySec.set(k, []); hostsBySec.get(k).push(h); }
+    for (const [host, xs] of byHost) {
+      const hid = idOf(host); if (told.has(hid) || [...told].some((i) => { const e = els.get(i); return e && (e.contains(host) || host.contains(e)); })) continue;
       told.add(hid);
+      const k = secIndex(host);
+      if (xs.every((x) => x.it === 1 && p5kf(x.kf)) && (hostsBySec.get(k) || []).length === 1 && !used.has(k)) continue; // the section's one Pattern 5 reveal
+      const x = xs[0];
       const n = x.it > 1 ? `${x.it} x ${(x.dur / 1000).toFixed(1)} s` : `${(x.dur / 1000).toFixed(1)} s`;
-      out.push({ id: hid, sel: sel(x.host), text: label(x.host), msg: `starts ${x.name === 'an animation' ? 'an animation' : `"${x.name}"`} (${n}) the moment it is scrolled into view (an IntersectionObserver)${x.target !== x.host ? ` on ${sel(x.target).split(' > ').pop()}` : ''}`, doc: D(x.host.getBoundingClientRect()) });
+      out.push({ id: hid, sel: sel(host), text: label(host), msg: `starts ${x.name === 'an animation' ? 'an animation' : `"${x.name}"`} (${n}) the moment it is scrolled into view (an IntersectionObserver)${x.target !== host ? ` on ${sel(x.target).split(' > ').pop()}` : ''}`, doc: D(host.getBoundingClientRect()) });
     }
     return out;
   }
@@ -9379,7 +9442,7 @@ const FIX = {
   marquee: 'drop the running line, or set it as full words that fit the screen',
   orphan: 'rebalance the text (text-wrap: pretty, or a shorter line) so the last line holds more than one short word',
   'scroll-linked': 'remove the scroll-driven motion; motion lives inside a visual as a small loop',
-  'scroll-reveal': 'show it at rest: no fade, rise or unmask when it is scrolled into view',
+  'scroll-reveal': 'show it at rest: no fade, rise or unmask when it is scrolled into view (one Pattern 5 reveal a section — a fade and/or a rise of 24px at most, played once — is allowed: scroll-motion.md Pattern 5, D16)',
   pinned: 'let the section scroll with the page',
   'no-visual': 'give the section a visual: a UI fragment on a ground, real icons, or a photograph that fits',
   'card-visual': 'give the cards a visual: an inset panel with a UI fragment, a photograph or real icons',
@@ -10767,14 +10830,15 @@ async function runWidth(cdp, helper, { w: width, h }, first) {
       F.push(Object.assign({ check: 'scroll-linked', sev: t.big || t.stage ? 'FAIL' : 'WARN', id: t.id, sel: t.sel, text: t.text, msg: `moves with the scroll on a CSS scroll timeline (animation-timeline: ${t.kind})` }, place(t.doc)));
     }
     // what animated in when it was first scrolled to
-    const revealed = [];
+    const revealed = [], p5secs = [];
     if (!quick) for (const r of (await safe('reveal', () => tab.eval('window.__cc.revealList()'))) || []) {
       const p = place(r.docs[0]); revealed.push(r.id);
+      if (r.p5) { if (r.sec >= 0) p5secs.push(r.sec); continue; } // D16: the section's one Pattern 5 reveal is allowed
       if (p.stop != null) for (const d of r.docs.slice(1)) { const top = d.top - stopY[p.stop]; if (top < vh && top + d.height > 0) p.rects.push({ left: d.left, top, width: d.width, height: d.height }); }
       F.push(Object.assign({ check: 'scroll-reveal', sev: 'FAIL', id: r.id, sel: r.sel, text: r.text, msg: `${r.n > 1 ? `${r.n} parts of this section animate` : 'animates'} in when scrolled into view (${r.how})${r.n > 1 ? `: ${r.sels.join(', ')}${r.n > 5 ? ', ...' : ''}` : ''}` }, p));
     }
     // what an IntersectionObserver set moving as it came on screen (seen in the walk, so also with --quick)
-    for (const r of (await safe('io-reveal', () => tab.eval(`window.__cc.ioReveals(${JSON.stringify(revealed)})`))) || []) F.push(Object.assign({ check: 'scroll-reveal', sev: 'FAIL', id: r.id, sel: r.sel, text: r.text, msg: r.msg }, place(r.doc)));
+    for (const r of (await safe('io-reveal', () => tab.eval(`window.__cc.ioReveals(${JSON.stringify(revealed)}, ${JSON.stringify(p5secs)})`))) || []) F.push(Object.assign({ check: 'scroll-reveal', sev: 'FAIL', id: r.id, sel: r.sel, text: r.text, msg: r.msg }, place(r.doc)));
     // feature sections without a visual
     TM('seams+lint+held');
     const NV = (await safe('no-visual', () => tab.eval(`window.__cc.noVisual(${JSON.stringify(TYPE)})`, 300000))) || { nv: [], holes: [] };

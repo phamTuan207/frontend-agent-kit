@@ -199,7 +199,10 @@ page is a tool, not a film.
   the viewport, `once: true` (never replays on scroll-up). One reveal
   per section, at most — never stagger a whole grid (if a grid must
   stagger, cap it at 3 items, 60ms apart, and the grid counts as the
-  section's one moment).
+  section's one moment — the gate counts animated parts, so the grid
+  must move as ONE wrapped part, a single fade/rise on the grid
+  container, to count as one; separately animated items are separate
+  reveals).
 - **Build it:** `IntersectionObserver` with `threshold: 0.15` and
   `rootMargin: '0px 0px -15% 0px'`, adding one class; or GSAP
   ScrollTrigger `toggleActions: 'play none none none'` (see
@@ -207,6 +210,17 @@ page is a tool, not a film.
   `whileInView` (React). Never use a scroll listener that sets
   `style.opacity` per frame for reveals — that is what scrubbing is
   for (Patterns 2–3); reveals are state changes, not scrubbed values.
+- **The gate (D16):** `scroll-reveal` allows exactly this recipe —
+  one reveal per section, a fade (from opacity 0) and/or a rise of
+  24px at most, played once, ending at rest. Anything past it (a
+  second reveal in the section, a rise over 24px, a slide, turn,
+  scale or unmask, a replay) FAILs as before. The allowance is in
+  `scroll-reveal` ONLY: `hidden-content` has no carve-out, so the
+  pre-reveal state must never be the plain-CSS state — put it under
+  a class the script adds on its live path (progressive
+  enhancement), or a script that never runs and reduced-motion
+  readers leave the section blank and the page FAILs
+  `hidden-content` instead.
 
 ### Pattern 6 — Pinned / sticky section (sticky storytelling)
 
