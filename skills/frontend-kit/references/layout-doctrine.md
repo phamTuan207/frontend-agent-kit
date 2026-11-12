@@ -20,7 +20,7 @@ Mark the kind on the page itself (`<html data-type="…">` + matching
 |---|---|---|
 | `software` | An app / SaaS / tool (a language-learning app, a dashboard) | All layout + visual checks; `product-shown` does NOT fire |
 | `service` | A service business / agency / studio | Same as software |
-| `product` | A PHYSICAL thing with client photographs (or a 3D render the brief asks for) | All of the above PLUS `product-shown` (hero must show a photograph/render of the product at ≥80% of the content width) |
+| `product` | A PHYSICAL thing with client photographs (or a 3D render the brief asks for) | All of the above PLUS `product-shown` (hero must show the product at ≥80% of the content width: a photograph by its frame, a render or cut-out by its subject — D18) |
 | `place` | A venue / location page | Place rules (rooms, menus, goods shown as themselves) |
 
 A language-learning app marked `data-type="product"` is a MIS-MARK, not a

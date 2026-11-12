@@ -189,9 +189,11 @@
 //              or a licence), even inside a closed <details>: the footer holds ONE line linking credits.html (photos.mjs credits --write)
 //              product-shown FAILs a physical product page whose hero shows no photograph and no render of the product (an img, a picture,
 //              a video, a canvas, a [data-object] or [data-print], or a background picture; a UI fragment or a drawn svg is not one).
-//              A later pass adds to product-shown the size: the hero product's drawn bounds (the subject inside its still, canvas or
-//              photograph, found from its pixels, object-fit and padding applied; the picture's own ground left out) under 60% of the
-//              content width of the hero's container FAILs, 60-80% WARNs (at 1000px and wider, in the way the judges read it at 1440).
+//              A later pass adds to product-shown the size: a render or cut-out by its drawn bounds (the subject inside its still
+//              or canvas, found from its pixels, object-fit and padding applied; the picture's own ground left out), a photograph
+//              by its frame, edge to edge (D18); under 60% of the content width of the hero's container FAILs, 60-80% WARNs
+//              (at 1000px and wider, in the way the judges read it at 1440). A live canvas's product is estimated at 0.86 of
+//              its frame, so the frame must span about 93% of the content width to read 80%.
 //              photo-repeat is a FAIL on a product page (one view twice), and there also reads the same VIEW in another colour: two
 //              [data-product] frames with one data-product-view (and spec, scene), or two pictures with one file stem less its width and
 //              colour suffix, are one picture whatever the colour: WARN, FAIL when they sit in neighbouring sections or share a colour
@@ -6088,7 +6090,7 @@ function lib() {
       if (!clear) {
         const ch3 = [0, 1, 2].map((c) => ring.map((q) => d[q + c]).sort((a, b) => a - b)[ring.length >> 1]); med = ch3;
         const near = ring.filter((q) => d[q + 3] >= 16 && Math.max(Math.abs(d[q] - med[0]), Math.abs(d[q + 1] - med[1]), Math.abs(d[q + 2] - med[2])) <= 36).length / ring.length;
-        if (near < 0.7) return { x0: 0, y0: 0, x1: 1, y1: 1, flat: false };
+        if (near < 0.7) return { x0: 0, y0: 0, x1: 1, y1: 1, flat: false, ring: 'busy' };
       }
       const cols = new Array(cw).fill(0), rows = new Array(ch).fill(0);
       for (let yy = 0; yy < ch; yy++) for (let xx = 0; xx < cw; xx++) {
@@ -6100,7 +6102,7 @@ function lib() {
       const first = (a) => a.findIndex((v) => v >= 2), last = (a) => { for (let q = a.length - 1; q >= 0; q--) if (a[q] >= 2) return q; return -1; };
       const x0 = first(cols), x1 = last(cols), y0 = first(rows), y1 = last(rows);
       if (x0 < 0 || y0 < 0) return null;
-      return { x0: x0 / cw, x1: (x1 + 1) / cw, y0: y0 / ch, y1: (y1 + 1) / ch, flat: true };
+      return { x0: x0 / cw, x1: (x1 + 1) / cw, y0: y0 / ch, y1: (y1 + 1) / ch, flat: true, ring: clear ? 'clear' : 'flat' };
     } catch (e) { return null; }
   }
   const DRAWN = MOCK + ', [role="img"], [data-fx], [data-fx-mounted], [aria-hidden="true"]';
@@ -9081,7 +9083,7 @@ function lib() {
     // the hero product's DRAWN size (the judges' "product small and boxed"): of the hero's pictures (an <img>, a <video>, a
     // <canvas>, the still or canvas a [data-product] frame mounts) the one whose subject is widest, measured where its subject is
     // drawn (inkBounds: the picture's own ground left out, object-fit and padding applied), against the content width of the hero's
-    // container. A canvas that reads back blank (a live WebGL turn) is the frame's box times the kit's fill (.86)
+    // container. A canvas that reads back blank (a live WebGL turn) is the frame's box times the kit's fill (.86 — so its frame must span about 93% of the content width to read 80%; disclosed in the finding). A photograph is not ink-measured at all (D18): its frame is the measure
     out.heroProduct = null;
     { const hero = S[0];
       if (hero) {
@@ -9096,6 +9098,12 @@ function lib() {
           let ink = inkBounds(e), how = ink ? 'pixels' : 'box';
           if (!ink && e.tagName === 'CANVAS' && e.closest('[data-product]')) { ink = { x0: 0.07, x1: 0.93, y0: 0.07, y1: 0.93 }; how = 'estimate'; }
           if (!ink) ink = { x0: 0, x1: 1, y0: 0, y1: 1 };
+          // D18: a photograph is judged by its FRAME, a render or cut-out by its subject ink. A photograph is
+          // an <img> or <video> not mounted as a render (not a canvas, not inside a [data-product] frame) whose
+          // pixels are not a cut-out (inkBounds' ring is not transparent): its subject on a calm ground is the
+          // photograph's own composition, not a small product in a wide frame. Its measured width is the drawn
+          // picture itself, edge to edge.
+          if (e.tagName !== 'CANVAS' && !e.closest('[data-product]') && !(ink && ink.ring === 'clear')) { ink = { x0: 0, x1: 1, y0: 0, y1: 1 }; how = 'frame'; }
           // the picture's own rectangle inside the box (object-fit, object-position)
           const nw = e.naturalWidth || e.videoWidth || e.width || bx.w, nh = e.naturalHeight || e.videoHeight || e.height || bx.h, fit = e.tagName === 'CANVAS' ? 'fill' : c.objectFit || 'fill';
           let dw = bx.w, dh = bx.h, ox = 0, oy = 0;
@@ -9525,7 +9533,7 @@ const FIX = {
   'fold-action': 'bring the hero\'s buttons onto the first screen: a shorter headline or line, the picture under the buttons',
   'action-count': 'the main action in the nav, the hero and the closing call; give the other sections their own action',
   'one-screen': 'give each section the screen (min-height: 100svh less the nav, its content centred), or join two short ones',
-  'product-shown': 'show the product itself: the client\'s photographs of it; a physical product with no photographs: stand-in photographs of its kind (photos.mjs search), a render (assets/objects/product-render, [data-product]) only when the brief asks for 3D, never mood stock in its place; drawn at 80% of the content width or more (60% FAILs), each view of it shown once',
+  'product-shown': 'show the product itself: the client\'s photographs of it; a physical product with no photographs: stand-in photographs of its kind (photos.mjs search), a render (assets/objects/product-render, [data-product]) only when the brief asks for 3D, never mood stock in its place; shown at 80% of the content width or more (under 60% FAILs; a photograph by its frame, a render or cut-out by its subject — D18), each view of it shown once',
   hover: 'give buttons and links a small answer to the pointer (the motion layer: a fill change, a drawn underline, an arrow that moves)',
 };
 FIX['hover-move'] = 'every linked card and linked photo answers the pointer: give the card class="card" (or the tile its media class) so motion.css lifts it 2px and zooms its photo; hover a linked card up 2px (translateY(-2px)) and zoom its photo to 1.02-1.03 inside its frame; no rotate, no 3D tilt, no growing card';
@@ -9846,11 +9854,13 @@ function moreFindings(M, PG, first, later, vw, vh, T) {
     heroBare = true;
     push('product-shown', 'FAIL', M.hero, `the hero of this product page shows no photograph and no render of the product: ${(M.picLabels || []).length ? `the page's pictures (${M.picLabels.slice(0, 3).map((l) => `"${l.slice(0, 30)}"`).join(', ')}) sit below it` : 'the page has no picture of it at all'}`, { fix: "lead with the product itself: the client's photograph of it, else stand-in photographs of its kind (photos.mjs search), a render (assets/objects/product-render, [data-product], data-product-place=hero) only when the brief asks for 3D; never a drawing, never mood stock, never another maker's product" });
   }
-  // A product hero shows the product at the size the judges read it: the drawn bounds of its picture (the subject, not the frame round it)
-  // under 60% of the container's content width FAILs, 60-80% WARNs (at a desktop width: 1440 and 1024, where the stage is a wide box)
+  // A product hero shows the product at the size the judges read it: a render or cut-out by the drawn bounds of its
+  // picture (the subject, not the frame round it), a photograph by its frame, edge to edge (D18); under 60% of the
+  // container's content width FAILs, 60-80% WARNs (at a desktop width: 1440 and 1024, where the stage is a wide box).
+  // A live canvas's product is estimated at 0.86 of its frame, so its frame must span about 93% to read 80%.
   if (vw >= 1000 && !heroBare && TYPE === 'product' && M.heroProduct && M.heroProduct.frac < 0.8) {
     const h = M.heroProduct, fail = h.frac < 0.6, pc = Math.round(h.frac * 100);
-    push('product-shown', fail ? 'FAIL' : 'WARN', h, `the hero's product is drawn ${h.w} x ${h.h}px, ${pc}% of the ${h.content}px content width at ${vw}px (its ${h.tag} is ${h.boxW}px wide${h.how === 'estimate' ? '; the product inside a live canvas is estimated from its frame' : ''}): a product page shows the product at 80% of the content width or more (under 60% FAILs)`, { more: h.more, fix: "make the product the hero: the picture across the full content width (a stage as wide as the container, the product filling it, not a rounded box with the product at its middle); a render's still cropped to the product (data-product-fill up to 1.2, a wide view such as side), or the client's photograph at full width" });
+    push('product-shown', fail ? 'FAIL' : 'WARN', h, `the hero's product is drawn ${h.w} x ${h.h}px, ${pc}% of the ${h.content}px content width at ${vw}px (its ${h.tag} is ${h.boxW}px wide${h.how === 'estimate' ? '; the product inside a live canvas is estimated at 0.86 of its frame (7% in from each edge), so the frame must span about 93% of the content width to read 80%' : h.how === 'frame' ? '; a photograph is judged by its frame, edge to edge — a render or a cut-out by its subject ink (D18)' : ''}): a product page shows the product at 80% of the content width or more (under 60% FAILs; the band is read at 1000px and wider)`, { more: h.more, fix: "make the product the hero: the picture across the full content width (a stage as wide as the container, the product filling it, not a rounded box with the product at its middle); a render's still cropped to the product (data-product-fill up to 1.2, a wide view such as side), or the client's photograph at full width" });
   }
   if (first && !heroBare && TYPE === 'product' && T && T.category && T.category.length) {
     // any word of the category names the product ("roasted coffee beans": coffee, beans), not only its last; a miss is a
