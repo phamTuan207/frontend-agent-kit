@@ -825,21 +825,132 @@ else
 fi
 
 # --- fixture page (served over http, never file://) -------------------------
+# M2: the fixture is a conforming miniature landing page (hero, features,
+# closing), not a one-line stub: the stub failed installed gate leg 2 on
+# CI main (11 FAIL / 4 WARN at 1440x900). Validated by gate.mjs on the
+# candidate in /tmp/s5cand: GREEN, 0 FAIL / 1 WARN (moment-none, a dealt
+# moment is out of scope for a verify fixture) at all 5 widths.
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 cat > "$work/index.html" <<'EOF'
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>frontend-agent-kit verify fixture</title>
+<html lang="en" data-type="software"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kit Fixture: a miniature landing page for gate checks</title>
+<meta name="description" content="A miniature landing page in 3 sections, built to show the kit gate on a tiny page.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Kit Fixture: a miniature landing page for gate checks">
+<meta property="og:description" content="A miniature landing page in 3 sections, built to show the kit gate on a tiny page.">
+<meta property="og:image" content="share.png">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="favicon.ico">
+<meta name="theme-color" content="#ffffff">
+<meta name="site-kind" content="software">
+<meta name="page-type" content="software">
 <link rel="stylesheet" href="tokens.css">
-<style>body{background:var(--bg);color:var(--ink);padding:var(--space)}</style></head>
-<body><main id="main"><h1>Verify fixture</h1><p>A clean page for the loop checks.</p></main></body></html>
+<script>document.documentElement.classList.add('m-enter');setTimeout(()=>document.documentElement.classList.add('m-enter-done'),700)</script>
+<style>
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); margin: 0; padding: 0; font-family: system-ui, sans-serif; font-size: 18px; line-height: 1.6; }
+h1 { font-size: 56px; line-height: 1.1; margin: 0 0 24px; letter-spacing: -0.02em; }
+h2 { font-size: 40px; line-height: 1.15; margin: 0 0 16px; letter-spacing: -0.02em; }
+h3 { font-size: 20px; line-height: 1.3; margin: 0 0 8px; }
+p { margin: 0 0 16px; }
+.wrap { max-width: 1200px; margin: 0 auto; }
+.nav { position: fixed; top: 0; left: 0; right: 0; height: 64px; background: #ffffff; box-shadow: 0 1px 8px rgba(10,15,30,0.08); z-index: 10; }
+.skip-link { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
+.skip-link:focus { width: auto; height: auto; padding: 12px 16px; margin: 0; overflow: visible; clip: auto; clip-path: none; white-space: normal; left: 8px; top: 8px; background: #0a0f1e; color: #ffffff; z-index: 20; }
+.nav__bar { display: flex; align-items: center; gap: 24px; height: 64px; }
+.nav__logo { font-weight: 700; font-size: 18px; color: #0a0f1e; text-decoration: none; margin-right: auto; padding: 12px 0; }
+.nav__link { font-size: 16px; color: #454f5e; text-decoration: none; padding: 12px 10px; }
+.nav__link:last-child { padding-right: 0; }
+section, footer.closing { min-height: 100svh; padding: 96px 0; }
+.eyebrow { font-size: 16px; letter-spacing: 0.08em; text-transform: uppercase; color: #454f5e; margin: 0 0 16px; }
+.lede { font-size: 20px; line-height: 1.5; color: #454f5e; max-width: 68ch; }
+.button { display: inline-flex; align-items: center; min-height: 48px; padding: 12px 24px; background: #0a0f1e; color: #ffffff; border-radius: 6px; font-weight: 600; font-size: 17px; text-decoration: none; }
+.mock { background: #f6f6f4; border: 1px solid #d8d8d2; border-radius: 12px; overflow: hidden; }
+.mock__bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: #ffffff; border-bottom: 1px solid #d8d8d2; font-size: 16px; color: #0a0f1e; }
+.dot { width: 12px; height: 12px; border-radius: 50%; background: #d8d8d2; }
+.mock__body { padding: 24px; display: grid; gap: 16px; }
+.mock__row { display: flex; align-items: center; gap: 16px; background: #ffffff; border: 1px solid #d8d8d2; border-radius: 6px; padding: 16px; font-size: 17px; color: #0a0f1e; }
+.mock__sq { width: 40px; height: 40px; border-radius: 6px; background: #2456e6; flex: none; }
+.mock__sq--ink { background: #0a0f1e; }
+.mock__sq--grey { background: #454f5e; }
+.hero__mock { height: 400px; margin-top: 40px; }
+.hero__mock .mock__body { height: 340px; align-content: center; }
+.closing__mock { height: 400px; margin-top: 32px; }
+.closing__mock .mock__body { height: 340px; align-content: center; }
+.panel { background: #ffffff; border: 1px solid #d8d8d2; border-radius: 12px; overflow: hidden; margin-top: 32px; }
+.cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; padding: 32px; }
+.col p { font-size: 17px; color: #454f5e; }
+.col svg { display: block; margin-bottom: 16px; }
+.strip { display: flex; align-items: flex-end; gap: 8px; height: 120px; padding: 16px; margin-bottom: 16px; background: #f6f6f4; border: 1px solid #d8d8d2; border-radius: 6px; }
+.strip span { width: 24px; border-radius: 4px 4px 0 0; }
+.strip .b1 { height: 40px; background: #2456e6; }
+.strip .b2 { height: 80px; background: #0a0f1e; }
+.strip .b3 { height: 56px; background: #454f5e; }
+.fine { font-size: 16px; color: #454f5e; }
+.cta-row { margin-top: 32px; }
+@media (max-width: 1239px) { .wrap { margin: 0 20px; max-width: none; } h1 { font-size: 44px; } h2 { font-size: 32px; } }
+@media (max-width: 820px) { .cols { grid-template-columns: 1fr; } section, footer.closing { min-height: 0; } }
+</style></head>
+<body id="top">
+<header class="nav"><a class="skip-link" href="#top">Skip to content</a><div class="wrap nav__bar">
+<a class="nav__logo" href="index.html">Kit Fixture</a>
+<a class="nav__link" href="#features">Feature section</a>
+</div></header>
+<main id="main">
+<section id="hero" class="hero" data-enter><div class="wrap">
+<div class="hero-text">
+<p class="eyebrow">Frontend-agent-kit &middot; Verify fixture</p>
+<h1>A miniature landing page in 3 sections</h1>
+<p class="lede">A tiny page for gate checks: hero, features and closing.</p>
+<p><a class="button" href="#features">See the 3 sections</a></p>
+<div class="mock hero__mock" data-ui="browser">
+<div class="mock__bar"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><rect x="1" y="1" width="18" height="18" rx="4" fill="none" stroke="#0a0f1e" stroke-width="2"/></svg> <span class="dot"></span><span class="dot"></span><span class="dot"></span> Fixture &mdash; 3 sections</div>
+<div class="mock__body">
+<div class="mock__row"><span class="mock__sq"></span> Hero screen</div>
+<div class="mock__row"><span class="mock__sq mock__sq--ink"></span> Feature section</div>
+<div class="mock__row"><span class="mock__sq mock__sq--grey"></span> Closing call</div>
+</div>
+</div>
+</div>
+</div></section>
+<section id="features"><div class="wrap">
+<h2>Feature section</h2>
+<p class="lede">Each section fills one screen at 1440 by 900.</p>
+<div class="panel" data-ui="panel">
+<div class="mock__bar"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><rect x="1" y="1" width="18" height="18" rx="4" fill="none" stroke="#0a0f1e" stroke-width="2"/></svg> Fixture panel</div>
+<div class="cols">
+<div class="col"><div class="strip"><span class="b1"></span><span class="b2"></span><span class="b3"></span></div><svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><rect x="2" y="2" width="36" height="36" rx="6" fill="#2456e6"/></svg><h3>Hero screen</h3><p>The hero holds the headline, one fact and one action.</p><p>One screen tall, nothing below it shows at load.</p></div>
+<div class="col"><div class="strip"><span class="b2"></span><span class="b3"></span><span class="b1"></span></div><svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><rect x="2" y="2" width="36" height="36" rx="6" fill="#0a0f1e"/></svg><h3>Feature panel</h3><p>The panel shows the three parts side by side.</p><p>Each part keeps its own mock, heading and two lines.</p></div>
+<div class="col"><div class="strip"><span class="b3"></span><span class="b1"></span><span class="b2"></span></div><svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><rect x="2" y="2" width="36" height="36" rx="6" fill="#454f5e"/></svg><h3>Closing section</h3><p>The closing repeats the action and ends the page.</p><p>One great button, then one short legal line.</p></div>
+</div>
+</div>
+<p class="cta-row"><a class="button" href="#top">See the 3 sections</a></p>
+</div></section>
+</main>
+<footer id="closing" class="closing"><div class="wrap">
+<div class="call">
+<h2>Closing call</h2>
+<p class="lede">The fixture is 3 sections tall. The gate reads each one.</p>
+<p><a class="button" href="#features">See the 3 sections</a></p>
+<div class="mock closing__mock" data-ui="browser">
+<div class="mock__bar"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><rect x="1" y="1" width="18" height="18" rx="4" fill="none" stroke="#0a0f1e" stroke-width="2"/></svg> <span class="dot"></span><span class="dot"></span><span class="dot"></span> Fixture &mdash; closing</div>
+<div class="mock__body">
+<div class="mock__row"><span class="mock__sq"></span> Hero screen</div>
+<div class="mock__row"><span class="mock__sq mock__sq--ink"></span> Feature section</div>
+<div class="mock__row"><span class="mock__sq mock__sq--grey"></span> Closing call</div>
+</div>
+</div>
+</div>
+<p class="fine">Kit Fixture &mdash; a verify page, 2026.</p>
+</div></footer>
+</body></html>
 EOF
 cat > "$work/tokens.css" <<'EOF'
-:root { --bg: #ffffff; --ink: #0a0f1e; --space: 16px; }
-body { background: var(--bg); color: var(--ink); margin: 0; padding: var(--space); font-family: system-ui, sans-serif; }
+:root { --bg: #ffffff; --ink: #0a0f1e; --surface: #f6f6f4; --mute: #454f5e; --line: #d8d8d2; --accent: #2456e6; --space: 16px; --max-width: 1200px; }
+body { background: var(--bg); color: var(--ink); margin: 0; font-family: system-ui, sans-serif; }
 EOF
 # The fixture is a real project by the gate's own rule (F6): the taste lock
 # lives in design/tokens.css — without it gate.sh fails the fixture.
@@ -848,15 +959,17 @@ cp "$work/tokens.css" "$work/design/tokens.css"
 # D13 (GAP-11): the fixture gains a minimal design/PLAN.md so the
 # converge check actually executes on the §5 gate runs (B §5e, C §4.3 —
 # a PLAN-less fixture lets a missing converge-check pass silently via
-# a note at gate.sh:466). One section, matching the fixture page's
-# <main id="main">; no state matrix (converge-check notes that state
+# a note at gate.sh:466). Three sections, matching the fixture page's
+# hero / features / closing; no state matrix (converge-check notes that state
 # evidence is unchecked, it does not fail).
 cat > "$work/design/PLAN.md" <<'EOF'
 ## Section inventory
 
 | id | section | notes |
 | --- | --- | --- |
-| main | Main | Verify fixture content |
+| hero | Hero | Miniature landing hero, one screen |
+| features | Features | Three-part panel, one screen |
+| closing | Closing | Closing call, one screen |
 EOF
 # Q-1 redo: the fixture ships a real favicon.ico so the page logs no
 # deterministic favicon 404 console error (the only anomaly on the old
@@ -873,6 +986,75 @@ hdr = struct.pack('<HHH', 0, 1, 1)
 entry = struct.pack('<BBBBHHII', w, h, 0, 0, 1, 32, len(img), 6 + 16)
 open(sys.argv[1], 'wb').write(hdr + entry + img)
 PYEOF
+# M2: the fixture ships a real share.png (1200x630, the og:image) so
+# the share-meta check reads a real file, not a dangling reference.
+# Stored base64 inline (3555 bytes): the exact bytes validated by
+# gate.mjs on the candidate page in /tmp/s5cand.
+base64 -d <<'EOF' > "$work/share.png"
+iVBORw0KGgoAAAANSUhEUgAABLAAAAJ2CAIAAADAIuwLAAANqklEQVR4nO3XMQEAIBAAoZ9dbGD/
+lmqPgxbM2ucCAAAQ8zM4QggAABAkhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAA
+AFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABR
+QggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUII
+AAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAA
+ECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAl
+hAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQA
+AABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAA
+UUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFC
+CAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggA
+ABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQ
+JYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWE
+AAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAA
+AFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABR
+QggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUII
+AAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAA
+ECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAl
+hAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQA
+AABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAA
+UUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFC
+CAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggA
+ABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQ
+JYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWE
+AAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAA
+AFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABR
+QggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUII
+AAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAA
+ECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAl
+hAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQA
+AABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAA
+UUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFC
+CAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggA
+ABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQ
+JYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWE
+AAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAA
+AFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABR
+QggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUII
+AAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAA
+ECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAl
+hAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQA
+AABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAA
+UUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFC
+CAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggA
+ABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQ
+JYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWE
+AAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAA
+AFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABR
+QggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUII
+AAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAA
+ECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAl
+hAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQA
+AABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAA
+UUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFC
+CAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggA
+ABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQ
+JYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWE
+AAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAA
+AFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABR
+QggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUII
+AAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAA
+ECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAl
+hAAAAFFCCAAAECWEAAAAUUIIAAAQJYQAAABRQggAABAlhAAAAFFCCAAAECWEAAAAUUIIAAAQ9TP4
+AFhOInxIW7TKAAAAAElFTkSuQmCC
+EOF
 
 # --- 4. impeccable detect runs ----------------------------------------------
 if [[ -n "$launcher" && -n "$expected_engine" ]]; then
