@@ -278,9 +278,9 @@
 // not named index.html, so two pages in one folder keep their own), or to a temp folder for a URL: never into the current
 // directory.
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, writeFileSync, statSync, createReadStream, readdirSync, unlinkSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync, statSync, createReadStream, readdirSync, unlinkSync, readFileSync, accessSync, constants } from 'node:fs';
 import { createServer } from 'node:http';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { join, resolve, dirname, basename, extname, relative, sep, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inflateSync } from 'node:zlib';
@@ -4611,9 +4611,71 @@ mkdirSync(outDir, { recursive: true });
 for (const f of readdirSync(outDir)) if (/^(sweep-)?\d{3,4}-.+\.jpg$/.test(f)) unlinkSync(join(outDir, f));
 
 // ---------------------------------------------------------------- our own Chrome: own profile, stopped by its own PID
+// KIT PATCH (2026-11-12, M2: browser discovery — ported from
+// crop-sections.mjs findChrome, merged with the fixed system list;
+// NOT upstream taste-skill 2.5.1): the old findChrome checked
+// existence only (a directory or a .zip passed discovery and died as
+// an EACCES crash at spawn), never searched the Playwright cache the
+// kit installs Chromium into, silently ignored a set-but-invalid
+// CHROME_PATH, could not consume the documented glob value
+// (CHROME_PATH=$HOME/.cache/ms-playwright/chromium-*/chrome-linux64/chrome),
+// and never looked on PATH. Candidate order below: CHROME_PATH
+// (fail-loud when set but invalid — explicit user intent, mirroring
+// crop-sections' --chrome precedent — never silently fall through to
+// a different browser) → Playwright cache → fixed system paths →
+// PATH. A candidate counts only when it is a real, executable file.
 function findChrome() {
+  // Existence alone is not usability: a directory or a non-executable
+  // file (e.g. a .zip) must be rejected HERE, with the path named, not
+  // at spawn as a bare EACCES.
+  const usable = (p) => {
+    if (!p) return false;
+    try {
+      if (!existsSync(p) || !statSync(p).isFile()) return false;
+      if (process.platform !== 'win32') accessSync(p, constants.X_OK);
+      return true;
+    } catch { return false; }
+  };
+  // Expand a single `*` segment (the documented CHROME_PATH form):
+  // match that segment against the parent directory's entries, newest
+  // first. A value with no `*` passes through unchanged.
+  const expandGlob = (p) => {
+    if (!p.includes('*')) return [p];
+    const parts = p.split('/');
+    const starIdx = parts.findIndex((s) => s.includes('*'));
+    if (starIdx < 0) return [p];
+    const parent = parts.slice(0, starIdx).join('/') || '/';
+    let entries;
+    try { entries = readdirSync(parent); } catch { return [p]; }
+    const re = new RegExp('^' + parts[starIdx].split('*').map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$');
+    const rest = parts.slice(starIdx + 1);
+    return entries.filter((e) => re.test(e)).sort().reverse()
+      .map((e) => [...parts.slice(0, starIdx), e, ...rest].join('/'));
+  };
   const env = process.env.CHROME_PATH;
-  if (env && existsSync(env)) return env;
+  if (env) {
+    for (const cand of expandGlob(env)) if (usable(cand)) return cand;
+    throw new Error(`CHROME_PATH is set to '${env}' but that is not an executable Chrome/Chromium binary.`);
+  }
+  // Playwright browser cache (the kit installs Chromium here — see
+  // install.sh for the per-OS roots and the chrome-mac-* layouts).
+  // Entries sort newest-first; headless-shell entries hold no
+  // chrome-linux*/chrome-mac-* binary, so they never match.
+  const cacheSubs = [
+    'chrome-linux64/chrome', 'chrome-linux/chrome',
+    'chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
+    'chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
+  ];
+  for (const root of [join(homedir(), '.cache', 'ms-playwright'), join(homedir(), 'Library', 'Caches', 'ms-playwright')]) {
+    let entries;
+    try { entries = readdirSync(root); } catch { continue; }
+    for (const dir of entries.sort().reverse()) {
+      for (const sub of cacheSubs) {
+        const cand = join(root, dir, sub);
+        if (usable(cand)) return cand;
+      }
+    }
+  }
   const local = process.env.LOCALAPPDATA || '', pf = process.env.PROGRAMFILES || 'C:\\Program Files', pf86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)';
   const home = process.env.HOME || process.env.USERPROFILE || '';
   const list = [
@@ -4622,13 +4684,25 @@ function findChrome() {
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Chromium.app/Contents/MacOS/Chromium',
     join(home, 'Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
     '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser', '/snap/bin/chromium',
+    '/opt/google/chrome/chrome',
   ];
-  return list.find((c) => c && existsSync(c)) || null;
+  const fixed = list.find((c) => c && usable(c));
+  if (fixed) return fixed;
+  // PATH lookup (POSIX only — the fixed list above covers Windows).
+  if (process.platform !== 'win32') {
+    for (const name of ['chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable']) {
+      try {
+        const r = spawnSync('sh', ['-c', `command -v ${name}`], { encoding: 'utf8' });
+        if (r.status === 0 && r.stdout && usable(r.stdout.trim())) return r.stdout.trim();
+      } catch { /* not on PATH — try the next name */ }
+    }
+  }
+  return null;
 }
 async function launch() {
   if (typeof WebSocket === 'undefined') throw new Error('Node 22+ is required (no built-in WebSocket in ' + process.version + ')');
   const exe = findChrome();
-  if (!exe) throw new Error('No Chrome, Edge or Chromium found; set CHROME_PATH.');
+  if (!exe) throw new Error('No Chrome, Edge or Chromium found — searched CHROME_PATH, ~/.cache/ms-playwright and ~/Library/Caches/ms-playwright, the system Chrome/Edge paths, and chromium / chromium-browser / google-chrome / google-chrome-stable on PATH. Install the kit browser with ./install.sh (Playwright CLI + browser) or set CHROME_PATH=$HOME/.cache/ms-playwright/chromium-*/chrome-linux64/chrome.');
   const dir = join(PROFILE, `run-${process.pid}-${Date.now().toString(36)}`);
   mkdirSync(dir, { recursive: true });
   // Chrome refuses to run as root without --no-sandbox: add it only when
