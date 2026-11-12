@@ -1253,7 +1253,7 @@ rl_reset_artifacts() {
 # (6) stale artifacts (page newer than both legs) → exit 2, nothing written.
 rl_reset_artifacts
 printf '<html><body><main id="main">x</main></body></html>\n' > "$rl_proj/design/page.html"
-touch -d '2030-01-01' "$rl_proj/design/page.html"
+touch -t 203001010000 "$rl_proj/design/page.html"
 rl_before="$(rl_lines)"
 if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/page.html >"$work/runlog-t6.log" 2>&1; then
   fail "run-log refusal (D13): record --gate pass with stale artifacts exited 0 — artifacts older than --page must be refused (exit 2)"
@@ -1262,7 +1262,7 @@ elif [[ "$(rl_lines)" != "$rl_before" ]]; then
 else
   ok "run-log refuses record --gate pass with stale artifacts (exit 2, nothing written)"
 fi
-touch -d '2026-11-11 12:00' "$rl_proj/design/page.html"
+touch -t 202611111200 "$rl_proj/design/page.html"
 # (7) absolute artifact path → exit 2, nothing written.
 rl_reset_artifacts
 printf 'GATE RESULT: PASS\n' > "$work/outside-leg1.log"
@@ -1337,7 +1337,7 @@ rm -f "$rl_proj/design/both.log" "$rl_proj/design/both2.log"
 # (11) --page outside the project → exit 2, nothing written (F3).
 rl_reset_artifacts
 printf '<html>old</html>\n' > "$work/ancient-page.html"
-touch -d '2019-01-01' "$work/ancient-page.html"
+touch -t 201901010000 "$work/ancient-page.html"
 rl_before="$(rl_lines)"
 if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page "$work/ancient-page.html" >"$work/runlog-t11.log" 2>&1; then
   fail "run-log refusal (D13): record --gate pass with --page outside the project exited 0 — an outside file cannot be the freshness reference (exit 2)"
@@ -1371,7 +1371,7 @@ fi
 # cannot create a symlink.
 rl_reset_artifacts
 printf 'GATE RESULT: PASS\n' > "$work/outside-evil.log"
-touch -d '2030-01-01' "$work/outside-evil.log"
+touch -t 203001010000 "$work/outside-evil.log"
 if mv "$rl_proj/design/gate-leg1.log" "$rl_proj/design/gate-leg1.real" && ln -s "$work/outside-evil.log" "$rl_proj/design/gate-leg1.log" 2>/dev/null; then
   rl_before="$(rl_lines)"
   if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log >"$work/runlog-t12.log" 2>&1; then
@@ -1399,7 +1399,7 @@ printf 'GATE RESULT: PASS\n' > "$work/rl-outdesign/gate-leg1.log"
 printf '===== gate verdict: GREEN =====\n' > "$work/rl-outdesign/gate-leg2.log"
 printf ':root{}\n' > "$work/rl-outdesign/tokens.css"
 printf '# Cross-check report (verify fixture)\n\nIndependent security cross-check of slice d12-test: 0 severe, 0 warning — verdict clear.\n' > "$work/rl-outdesign/cc.md"
-touch -d '2026-11-11 12:00' "$work/rl-outdesign/tokens.css"
+touch -t 202611111200 "$work/rl-outdesign/tokens.css"
 if mv "$rl_proj/design" "$work/rl-design-backup" && ln -s "$work/rl-outdesign" "$rl_proj/design" 2>/dev/null; then
   rl_before="$(rl_lines)"
   if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log >"$work/runlog-t13.log" 2>&1; then
@@ -1470,7 +1470,7 @@ fi
 # stale artifacts → exit 2, nothing written (the hardlink shares the
 # leg's inode, so it is the artifact even though its realpath differs).
 rl_reset_artifacts
-touch -d '2020-01-01' "$rl_proj/design/gate-leg1.log" "$rl_proj/design/gate-leg2.log"
+touch -t 202001010000 "$rl_proj/design/gate-leg1.log" "$rl_proj/design/gate-leg2.log"
 if ln "$rl_proj/design/gate-leg1.log" "$rl_proj/design/page-hard.html" 2>/dev/null; then
   rl_before="$(rl_lines)"
   if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/page-hard.html >"$work/runlog-t14.log" 2>&1; then
@@ -1520,7 +1520,7 @@ rl_reset_artifacts
 # (15) R3 (fix round 2): --page an old .html inside design/ (2019), older
 # than tokens.css → exit 2, nothing written (anchor: tokens <= page).
 printf '<html>old</html>\n' > "$rl_proj/design/ancient.html"
-touch -d '2019-01-01' "$rl_proj/design/ancient.html"
+touch -t 201901010000 "$rl_proj/design/ancient.html"
 rl_before="$(rl_lines)"
 if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/ancient.html >"$work/runlog-t15.log" 2>&1; then
   fail "run-log refusal (D13): record --gate pass with --page older than tokens.css exited 0 — a page older than the locked tokens must be refused (exit 2)"
@@ -1532,7 +1532,7 @@ fi
 rm -f "$rl_proj/design/ancient.html"
 # (16) R3: --page a non-HTML file outside design/ (README.md) → exit 2.
 printf '# readme\n' > "$rl_proj/README.md"
-touch -d '2019-01-01' "$rl_proj/README.md"
+touch -t 201901010000 "$rl_proj/README.md"
 rl_before="$(rl_lines)"
 if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page README.md >"$work/runlog-t16.log" 2>&1; then
   fail "run-log refusal (D13): record --gate pass with --page README.md exited 0 — the freshness reference must be the built .html page inside design/ (exit 2)"
@@ -1544,7 +1544,7 @@ fi
 rm -f "$rl_proj/README.md"
 # (17) R3: --page a freshly created file backdated to 2019 → exit 2.
 printf '<html>new-old</html>\n' > "$rl_proj/design/brand-new-old.html"
-touch -d '2019-01-01' "$rl_proj/design/brand-new-old.html"
+touch -t 201901010000 "$rl_proj/design/brand-new-old.html"
 rl_before="$(rl_lines)"
 if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/brand-new-old.html >"$work/runlog-t17.log" 2>&1; then
   fail "run-log refusal (D13): record --gate pass with a freshly created backdated --page exited 0 — a page older than the locked tokens must be refused (exit 2)"
@@ -1559,7 +1559,7 @@ rm -f "$rl_proj/design/brand-new-old.html"
 # the real tokens file, not a link).
 rl_reset_artifacts
 printf ':root{old}\n' > "$rl_proj/design/old.css"
-touch -d '2019-01-01' "$rl_proj/design/old.css"
+touch -t 201901010000 "$rl_proj/design/old.css"
 if mv "$rl_proj/design/tokens.css" "$rl_proj/design/tokens.real" && ln -s old.css "$rl_proj/design/tokens.css" 2>/dev/null; then
   rl_before="$(rl_lines)"
   if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log >"$work/runlog-t18.log" 2>&1; then
@@ -1639,7 +1639,7 @@ fi
 # both are set to 12:00 here — equal mtimes allowed — to keep the
 # tokens <= page anchor and the artifacts >= page freshness both true.)
 rl_reset_artifacts
-touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
 rl_before="$(rl_lines)"
 if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/page.html >"$work/runlog-t21.log" 2>&1; then
   if [[ "$(rl_lines)" == "$((rl_before + 1))" ]] && tail -n 1 "$rl_log" | grep -q '"page":"design/page.html"'; then
@@ -1684,9 +1684,9 @@ fi
 # mtime) + --page design/page.html → exit 2, nothing written. The anchor
 # must be the real tokens file, mirroring the no---page fallback.
 rl_reset_artifacts
-touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
 if mv "$rl_proj/design/tokens.css" "$rl_proj/design/tokens.real" && mkdir "$rl_proj/design/tokens.css" 2>/dev/null; then
-  touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css"
+  touch -t 202611111200 "$rl_proj/design/tokens.css"
   rl_before="$(rl_lines)"
   if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/page.html >"$work/runlog-t24.log" 2>&1; then
     fail "run-log refusal (D13): record --gate pass with design/tokens.css as a directory exited 0 — the freshness anchor must be the real tokens file (exit 2)"
@@ -1711,7 +1711,7 @@ if mv "$rl_proj/design/tokens.css" "$rl_proj/design/tokens.real" && mkdir "$rl_p
   fi
   rm -rf "$rl_proj/design/tokens.css"
   mv "$rl_proj/design/tokens.real" "$rl_proj/design/tokens.css"
-  touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+  touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
 else
   if [[ -d "$rl_proj/design/tokens.css" ]]; then rmdir "$rl_proj/design/tokens.css" 2>/dev/null || true; fi
   if [[ -f "$rl_proj/design/tokens.real" ]]; then mv "$rl_proj/design/tokens.real" "$rl_proj/design/tokens.css"; fi
@@ -1721,7 +1721,7 @@ fi
 # nothing written.
 rl_reset_artifacts
 printf '<html>dot</html>\n' > "$rl_proj/design/.html"
-touch -d '2026-11-11 12:00' "$rl_proj/design/.html"
+touch -t 202611111200 "$rl_proj/design/.html"
 rl_before="$(rl_lines)"
 if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/.html >"$work/runlog-t25.log" 2>&1; then
   fail "run-log refusal (D13): record --gate pass with --page design/.html exited 0 — a dotfile with an empty basename is not a built page (exit 2)"
@@ -1770,7 +1770,7 @@ mkdir -p "$work/rl-nested-out"
 printf 'GATE RESULT: PASS\n' > "$work/rl-nested-out/gate-leg1.log"
 printf '===== gate verdict: GREEN =====\n' > "$work/rl-nested-out/gate-leg2.log"
 printf ':root{}\n' > "$work/rl-nested-out/tokens.css"
-touch -d '2026-11-11 12:00' "$work/rl-nested-out/tokens.css"
+touch -t 202611111200 "$work/rl-nested-out/tokens.css"
 rm -f "$work/rl-nested-mid"
 ln -s "$work/rl-nested-out" "$work/rl-nested-mid" 2>/dev/null
 if mv "$rl_proj/design" "$work/rl-design-backup2" && ln -s "$work/rl-nested-mid" "$rl_proj/design" 2>/dev/null; then
@@ -1793,7 +1793,7 @@ fi
 # (28) Missing design/tokens.css + --page → exit 2, nothing written (the
 # anchor cannot be computed — only old-page cases (15)/(17) tested it).
 rl_reset_artifacts
-touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
 if mv "$rl_proj/design/tokens.css" "$rl_proj/design/tokens.real" 2>/dev/null; then
   rl_before="$(rl_lines)"
   if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/page.html >"$work/runlog-t28.log" 2>&1; then
@@ -1804,7 +1804,7 @@ if mv "$rl_proj/design/tokens.css" "$rl_proj/design/tokens.real" 2>/dev/null; th
     ok "run-log refuses record --gate pass with a missing design/tokens.css plus --page (exit 2, nothing written)"
   fi
   mv "$rl_proj/design/tokens.real" "$rl_proj/design/tokens.css"
-  touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+  touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
 else
   fail "run-log refusal (D13): setup failed for the missing-tokens.css case — could not move design/tokens.css aside"
 fi
@@ -1879,7 +1879,7 @@ fi
 # (31) S2 shape: --page design/page.htm → exit 2, nothing written.
 rl_reset_artifacts
 printf '<html>htm</html>\n' > "$rl_proj/design/page.htm"
-touch -d '2026-11-11 12:00' "$rl_proj/design/page.htm"
+touch -t 202611111200 "$rl_proj/design/page.htm"
 rl_before="$(rl_lines)"
 if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/page.htm >"$work/runlog-t31.log" 2>&1; then
   fail "run-log refusal (D13): record --gate pass with --page design/page.htm exited 0 — the freshness reference must be an .html file (exit 2)"
@@ -1892,7 +1892,7 @@ rm -f "$rl_proj/design/page.htm"
 # (32) Trailing-slash --page design/page.html/ → exit 0, stored
 # canonically as design/page.html (path.resolve normalises the slash).
 rl_reset_artifacts
-touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
 rl_before="$(rl_lines)"
 if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/page.html/ >"$work/runlog-t32.log" 2>&1; then
   if [[ "$(rl_lines)" == "$((rl_before + 1))" ]] && tail -n 1 "$rl_log" | grep -q '"page":"design/page.html"'; then
@@ -2084,7 +2084,7 @@ fi
 # design/page.html → exit 2, nothing written (the S1 isFile() anchor
 # check covers FIFOs exactly as it covers directories).
 rl_reset_artifacts
-touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
 if mv "$rl_proj/design/tokens.css" "$rl_proj/design/tokens.real" && mkfifo "$rl_proj/design/tokens.css" 2>/dev/null; then
   rl_before="$(rl_lines)"
   if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/page.html >"$work/runlog-t44.log" 2>&1; then
@@ -2099,7 +2099,7 @@ if mv "$rl_proj/design/tokens.css" "$rl_proj/design/tokens.real" && mkfifo "$rl_
   fi
   rm -f "$rl_proj/design/tokens.css"
   mv "$rl_proj/design/tokens.real" "$rl_proj/design/tokens.css"
-  touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+  touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
 else
   if [[ -p "$rl_proj/design/tokens.css" ]]; then rm -f "$rl_proj/design/tokens.css"; fi
   if [[ -f "$rl_proj/design/tokens.real" ]]; then mv "$rl_proj/design/tokens.real" "$rl_proj/design/tokens.css"; fi
@@ -2109,7 +2109,7 @@ fi
 # socket (python3 AF_UNIX bind; the socket file persists after the
 # binder exits) + --page design/page.html → exit 2, nothing written.
 rl_reset_artifacts
-touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
 if mv "$rl_proj/design/tokens.css" "$rl_proj/design/tokens.real" && python3 -c "import socket; s = socket.socket(socket.AF_UNIX); s.bind('$rl_proj/design/tokens.css'); s.close()" 2>/dev/null; then
   rl_before="$(rl_lines)"
   if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/page.html >"$work/runlog-t45.log" 2>&1; then
@@ -2124,7 +2124,7 @@ if mv "$rl_proj/design/tokens.css" "$rl_proj/design/tokens.real" && python3 -c "
   fi
   rm -f "$rl_proj/design/tokens.css"
   mv "$rl_proj/design/tokens.real" "$rl_proj/design/tokens.css"
-  touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+  touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
 else
   if [[ -S "$rl_proj/design/tokens.css" ]]; then rm -f "$rl_proj/design/tokens.css"; fi
   if [[ -f "$rl_proj/design/tokens.real" ]]; then mv "$rl_proj/design/tokens.real" "$rl_proj/design/tokens.css"; fi
@@ -2134,9 +2134,9 @@ fi
 # as a directory, NO --page → exit 2, nothing written, via the unchanged
 # fallback message (only the --page path was tested by (24)).
 rl_reset_artifacts
-touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
 if mv "$rl_proj/design/tokens.css" "$rl_proj/design/tokens.real" && mkdir "$rl_proj/design/tokens.css" 2>/dev/null; then
-  touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css"
+  touch -t 202611111200 "$rl_proj/design/tokens.css"
   rl_before="$(rl_lines)"
   if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log >"$work/runlog-t46.log" 2>&1; then
     fail "run-log refusal (D13): record --gate pass with design/tokens.css as a directory and no --page exited 0 — the fallback anchor must be the real tokens file (exit 2)"
@@ -2150,7 +2150,7 @@ if mv "$rl_proj/design/tokens.css" "$rl_proj/design/tokens.real" && mkdir "$rl_p
   fi
   rm -rf "$rl_proj/design/tokens.css"
   mv "$rl_proj/design/tokens.real" "$rl_proj/design/tokens.css"
-  touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+  touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
 else
   if [[ -d "$rl_proj/design/tokens.css" ]]; then rmdir "$rl_proj/design/tokens.css" 2>/dev/null || true; fi
   if [[ -f "$rl_proj/design/tokens.real" ]]; then mv "$rl_proj/design/tokens.real" "$rl_proj/design/tokens.css"; fi
@@ -2161,9 +2161,9 @@ fi
 # nothing written, via the "--page must be a regular file" message (the
 # --page regular-file check fires before the tokens.css exception).
 rl_reset_artifacts
-touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
 if mv "$rl_proj/design/tokens.css" "$rl_proj/design/tokens.real" && mkdir "$rl_proj/design/tokens.css" 2>/dev/null; then
-  touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css"
+  touch -t 202611111200 "$rl_proj/design/tokens.css"
   rl_before="$(rl_lines)"
   if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/tokens.css >"$work/runlog-t47.log" 2>&1; then
     fail "run-log refusal (D13): record --gate pass with --page design/tokens.css when tokens.css is a directory exited 0 — --page must be a regular file (exit 2)"
@@ -2177,7 +2177,7 @@ if mv "$rl_proj/design/tokens.css" "$rl_proj/design/tokens.real" && mkdir "$rl_p
   fi
   rm -rf "$rl_proj/design/tokens.css"
   mv "$rl_proj/design/tokens.real" "$rl_proj/design/tokens.css"
-  touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+  touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
 else
   if [[ -d "$rl_proj/design/tokens.css" ]]; then rmdir "$rl_proj/design/tokens.css" 2>/dev/null || true; fi
   if [[ -f "$rl_proj/design/tokens.real" ]]; then mv "$rl_proj/design/tokens.real" "$rl_proj/design/tokens.css"; fi
@@ -2188,7 +2188,7 @@ fi
 # — not a name, so it is not a built page → exit 2, nothing written.
 rl_reset_artifacts
 printf '<html>dd</html>\n' > "$rl_proj/design/..html"
-touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/..html"
+touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/..html"
 rl_before="$(rl_lines)"
 if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/..html >"$work/runlog-t48.log" 2>&1; then
   fail "run-log refusal (D13): record --gate pass with --page design/..html exited 0 — a dot-only stem before .html is not a built page (exit 2)"
@@ -2202,7 +2202,7 @@ rm -f "$rl_proj/design/..html"
 # extension check sees ".html " not ".html" → exit 2, nothing written.
 rl_reset_artifacts
 printf '<html>ts</html>\n' > "$rl_proj/design/a.html "
-touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/a.html "
+touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/a.html "
 rl_before="$(rl_lines)"
 if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page "design/a.html " >"$work/runlog-t49.log" 2>&1; then
   fail "run-log refusal (D13): record --gate pass with --page design/a.html plus a trailing space exited 0 — the freshness reference must be an .html file (exit 2)"
@@ -2217,7 +2217,7 @@ rm -f "$rl_proj/design/a.html "
 # nothing written.
 rl_reset_artifacts
 printf '<html>du</html>\n' > "$rl_proj/design/.HTML"
-touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/.HTML"
+touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/.HTML"
 rl_before="$(rl_lines)"
 if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/.HTML >"$work/runlog-t50.log" 2>&1; then
   fail "run-log refusal (D13): record --gate pass with --page design/.HTML exited 0 — a dotfile with an empty basename is not a built page (exit 2)"
@@ -2233,7 +2233,7 @@ rm -f "$rl_proj/design/.HTML"
 # exit 2, nothing written.
 rl_reset_artifacts
 printf '<html>de</html>\n' > "$rl_proj/design/x.html.html"
-touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/x.html.html"
+touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/x.html.html"
 rl_before="$(rl_lines)"
 if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/x.html.html >"$work/runlog-t51.log" 2>&1; then
   fail "run-log refusal (D13): record --gate pass with --page design/x.html.html exited 0 — a double extension is not a built page (exit 2)"
@@ -2247,7 +2247,7 @@ rm -f "$rl_proj/design/x.html.html"
 # no dot — does not end with ".html" → exit 2, nothing written.
 rl_reset_artifacts
 printf '<html>nh</html>\n' > "$rl_proj/design/html"
-touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/html"
+touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/html"
 rl_before="$(rl_lines)"
 if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/html >"$work/runlog-t52.log" 2>&1; then
   fail "run-log refusal (D13): record --gate pass with --page design/html exited 0 — a file named exactly html is not an .html file (exit 2)"
@@ -2530,7 +2530,7 @@ fi
 # (69) Land variant of (44) (fix round 5): design/tokens.css as a FIFO +
 # --page design/page.html on `land` → exit 2, nothing written.
 rl_reset_artifacts
-touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
 if mv "$rl_proj/design/tokens.css" "$rl_proj/design/tokens.real" && mkfifo "$rl_proj/design/tokens.css" 2>/dev/null; then
   if node "$run_log_mjs" --project "$rl_proj" crosscheck --slice d12-test --severe 0 --warning 0 --report design/cc.md --checker security-expert --basis "fresh context, no production history" >"$work/runlog-t69-cc.log" 2>&1; then
     rl_before="$(rl_lines)"
@@ -2550,7 +2550,7 @@ if mv "$rl_proj/design/tokens.css" "$rl_proj/design/tokens.real" && mkfifo "$rl_
   fi
   rm -f "$rl_proj/design/tokens.css"
   mv "$rl_proj/design/tokens.real" "$rl_proj/design/tokens.css"
-  touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+  touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
 else
   if [[ -p "$rl_proj/design/tokens.css" ]]; then rm -f "$rl_proj/design/tokens.css"; fi
   if [[ -f "$rl_proj/design/tokens.real" ]]; then mv "$rl_proj/design/tokens.real" "$rl_proj/design/tokens.css"; fi
@@ -2561,7 +2561,7 @@ fi
 # written.
 rl_reset_artifacts
 printf '<html>dd</html>\n' > "$rl_proj/design/..html"
-touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/..html"
+touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/..html"
 if node "$run_log_mjs" --project "$rl_proj" crosscheck --slice d12-test --severe 0 --warning 0 --report design/cc.md --checker security-expert --basis "fresh context, no production history" >"$work/runlog-t70-cc.log" 2>&1; then
   rl_before="$(rl_lines)"
   if node "$run_log_mjs" --project "$rl_proj" land --slice d12-test --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/..html >"$work/runlog-t70.log" 2>&1; then
@@ -2818,7 +2818,7 @@ fi
 # written. (The stored path would have come out canonicalised, leaving
 # no trace of the evasion.)
 printf '<html><body><main id="main">x</main></body></html>\n' > "$rl_proj/design/page.html"
-touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
 rl_reset_artifacts
 rl_before="$(rl_lines)"
 if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/../design/page.html >"$work/runlog-t84.log" 2>&1; then
@@ -2832,7 +2832,7 @@ fi
 # (a ".." after a real segment, still resolving inside design/) → exit 2,
 # nothing written.
 printf '<html><body><main id="main">x</main></body></html>\n' > "$rl_proj/design/page.html"
-touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
 rl_reset_artifacts
 rl_before="$(rl_lines)"
 if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/sub/../page.html >"$work/runlog-t85.log" 2>&1; then
@@ -2846,7 +2846,7 @@ fi
 # nothing written. (A "." segment is the same non-canonical spelling
 # class as ".."; the plain spelling design/page.html is the accepted form.)
 printf '<html><body><main id="main">x</main></body></html>\n' > "$rl_proj/design/page.html"
-touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
 rl_reset_artifacts
 rl_before="$(rl_lines)"
 if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/./page.html >"$work/runlog-t86.log" 2>&1; then
@@ -2860,7 +2860,7 @@ fi
 # (the same ".." hole in the leg loop, not only --page) → exit 2, nothing
 # written.
 printf '<html><body><main id="main">x</main></body></html>\n' > "$rl_proj/design/page.html"
-touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
 rl_reset_artifacts
 rl_before="$(rl_lines)"
 if node "$run_log_mjs" --project "$rl_proj" record --round 9 --grader none --scores none --gate pass --gate-leg1 design/../design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/page.html >"$work/runlog-t87.log" 2>&1; then
@@ -2873,7 +2873,7 @@ fi
 # (88) Land variant of (84) — --page design/../design/page.html on `land`
 # → exit 2, nothing written.
 printf '<html><body><main id="main">x</main></body></html>\n' > "$rl_proj/design/page.html"
-touch -d '2026-11-11 12:00' "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
+touch -t 202611111200 "$rl_proj/design/tokens.css" "$rl_proj/design/page.html"
 rl_reset_artifacts
 if node "$run_log_mjs" --project "$rl_proj" crosscheck --slice d12-test --severe 0 --warning 0 --report design/cc.md --checker security-expert --basis "fresh context, no production history" >"$work/runlog-t88-cc.log" 2>&1; then
   rl_before="$(rl_lines)"
@@ -2914,9 +2914,9 @@ done
 printf 'GATE RESULT: PASS\n' > "$jr_proj/design/gate-leg1.log"
 printf '===== gate verdict: GREEN =====\n' > "$jr_proj/design/gate-leg2.log"
 for r in 1 2 3 4 5 6 7 9; do printf 'cross-check report r%s\n' "$r" > "$jr_proj/design/crosscheck/round-$r.md"; done
-touch -d '2026-11-11 12:00' "$jr_proj/design/tokens.css"
-touch -d '2026-11-11 12:01' "$jr_proj/design/page.html"
-touch -d '2026-11-11 12:02' "$jr_proj/design/screenshots/"*.png "$jr_proj/design/screenshots-prev/"*.png "$jr_proj/design/gate-leg1.log" "$jr_proj/design/gate-leg2.log" "$jr_proj/design/crosscheck/"*.md
+touch -t 202611111200 "$jr_proj/design/tokens.css"
+touch -t 202611111201 "$jr_proj/design/page.html"
+touch -t 202611111202 "$jr_proj/design/screenshots/"*.png "$jr_proj/design/screenshots-prev/"*.png "$jr_proj/design/gate-leg1.log" "$jr_proj/design/gate-leg2.log" "$jr_proj/design/crosscheck/"*.md
 judge_report_mjs="$(dirname "$run_log_mjs")/judge-report.mjs"
 [[ -f "$judge_report_mjs" ]] || judge_report_mjs="$root/skills/frontend-kit/scripts/judge-report.mjs"
 runlog_check_mjs="$(dirname "$run_log_mjs")/gate/runlog-check.mjs"
@@ -2971,7 +2971,7 @@ jr_fill_scores() {
     -e "s/| Colour | ? | ? |/| Colour | accent button contrast 4.6 vs ref 1 | $4 |/" \
     -e "s/| Space | ? | ? |/| Space | card padding 32px vs ref 1 | $5 |/" \
     -e 's/^Fix order: ?$/Fix order: Layout first, then Type./' "$1"
-  touch -d '2026-11-11 12:05' "$1"
+  touch -t 202611111205 "$1"
 }
 jr_fill_pairwise() { # file keep
   sed -i -e '/^PENDING/d' -e 's/^basis:$/basis: fresh context, no production history/' \
@@ -2979,7 +2979,7 @@ jr_fill_pairwise() { # file keep
     -e 's/^Defects in A: ?$/Defects in A: hero heading clips 2px at 390px/' \
     -e 's/^Defects in B: ?$/Defects in B: section gap 12px off scale/' \
     -e "s/^Pairwise: keep ? — ?\$/Pairwise: keep $2 — hero heading fits at 390px, gap 96px on scale/" "$1"
-  touch -d '2026-11-11 12:05' "$1"
+  touch -t 202611111205 "$1"
 }
 # (1) graded record with NO --judge-report → exit 2 (the C-memo escape:
 # self-asserted scores on a green gate).
@@ -3054,18 +3054,18 @@ jr_reject "record whose --basis differs from the artifact" "$work/judge-t15.log"
 # (16) PAGE EDITED after judging (gate legs re-run, so only the artifact's
 # page hash can catch it) → exit 2.
 printf '<html><body><main id="main"><h1>EDITED</h1></main></body></html>\n' > "$jr_proj/design/page.html"
-touch -d '2026-11-11 12:06' "$jr_proj/design/page.html"
-touch -d '2026-11-11 12:07' "$jr_proj/design/gate-leg1.log" "$jr_proj/design/gate-leg2.log"
+touch -t 202611111206 "$jr_proj/design/page.html"
+touch -t 202611111207 "$jr_proj/design/gate-leg1.log" "$jr_proj/design/gate-leg2.log"
 jr_reject "record after the page was edited post-judging" "$work/judge-t16.log" "page changed after judging" \
   node "$run_log_mjs" --project "$jr_proj" record --round 2 --grader judge-subagent --basis "$jr_basis" --scores 3,3,3,3 --judge-report design/judge/round-2.md --gate pass $jr_legs
 cp "$work/page-d15-orig.html" "$jr_proj/design/page.html"
-touch -d '2026-11-11 12:01' "$jr_proj/design/page.html"
-touch -d '2026-11-11 12:02' "$jr_proj/design/gate-leg1.log" "$jr_proj/design/gate-leg2.log"
+touch -t 202611111201 "$jr_proj/design/page.html"
+touch -t 202611111202 "$jr_proj/design/gate-leg1.log" "$jr_proj/design/gate-leg2.log"
 # (17) STALE artifact: the report predates the current page → exit 2.
-touch -d '2026-11-11 11:59' "$jr_proj/design/judge/round-2.md"
+touch -t 202611111159 "$jr_proj/design/judge/round-2.md"
 jr_reject "record citing a judge artifact older than the page" "$work/judge-t17.log" "is older than" \
   node "$run_log_mjs" --project "$jr_proj" record --round 2 --grader judge-subagent --basis "$jr_basis" --scores 3,3,3,3 --judge-report design/judge/round-2.md --gate pass $jr_legs
-touch -d '2026-11-11 12:05' "$jr_proj/design/judge/round-2.md"
+touch -t 202611111205 "$jr_proj/design/judge/round-2.md"
 # Round 2 positive (the mismatches above must not have consumed it).
 jr_before="$(jr_lines)"
 if node "$run_log_mjs" --project "$jr_proj" record --round 2 --grader judge-subagent --basis "$jr_basis" --scores 3,3,3,3 --judge-report design/judge/round-2.md --gate pass $jr_legs >"$work/judge-t17b.log" 2>&1 && [[ "$(jr_lines)" == "$((jr_before + 1))" ]]; then
@@ -3079,11 +3079,11 @@ fi
 jr_prep 3 absolute
 jr_fill_scores "$jr_proj/design/judge/round-3.md" 4 4 4 4
 printf ':root{--color-canvas:#000}\n' >> "$jr_proj/design/tokens.css"
-touch -d '2026-11-11 12:00' "$jr_proj/design/tokens.css"
+touch -t 202611111200 "$jr_proj/design/tokens.css"
 jr_reject "record after tokens.css was edited post-judging" "$work/judge-t18.log" "binds to tokens-sha256" \
   node "$run_log_mjs" --project "$jr_proj" record --round 3 --grader judge-subagent --basis "$jr_basis" --scores 4,4,4,4 --judge-report design/judge/round-3.md --gate pass $jr_legs
 cp "$work/tokens-d15-orig.css" "$jr_proj/design/tokens.css"
-touch -d '2026-11-11 12:00' "$jr_proj/design/tokens.css"
+touch -t 202611111200 "$jr_proj/design/tokens.css"
 jr_before="$(jr_lines)"
 if node "$run_log_mjs" --project "$jr_proj" record --round 3 --grader judge-subagent --basis "$jr_basis" --scores 4,4,4,4 --judge-report design/judge/round-3.md --gate pass $jr_legs >"$work/judge-t18b.log" 2>&1 && [[ "$(jr_lines)" == "$((jr_before + 1))" ]]; then
   ok "run-log records round 3 with the tokens restored (hash binding is content, not assertion)"
@@ -3155,11 +3155,11 @@ jr_reject "pairwise record citing the same artifact twice" "$work/judge-t26.log"
 # (27) pairwise SPLIT: both calls keep the CURRENT page's set in their
 # own A/B terms edited to disagree after derivation → exit 2 (a tie).
 sed -i 's/^Pairwise: keep B —/Pairwise: keep A —/' "$jr_proj/design/judge/round-5-pairwise-2.md"
-touch -d '2026-11-11 12:05' "$jr_proj/design/judge/round-5-pairwise-2.md"
+touch -t 202611111205 "$jr_proj/design/judge/round-5-pairwise-2.md"
 jr_reject "pairwise record whose artifacts disagree after derivation" "$work/judge-t27.log" "disagree after A/B derivation" \
   node "$run_log_mjs" --project "$jr_proj" record --round 5 --grader judge-subagent --basis "$jr_basis" --scores 4,4,4,4 --judge-report design/judge/round-5.md --gate pass $jr_legs --pairwise keep-challenger --pairwise-reports design/judge/round-5-pairwise-1.md,design/judge/round-5-pairwise-2.md
 sed -i 's/^Pairwise: keep A —/Pairwise: keep B —/' "$jr_proj/design/judge/round-5-pairwise-2.md"
-touch -d '2026-11-11 12:05' "$jr_proj/design/judge/round-5-pairwise-2.md"
+touch -t 202611111205 "$jr_proj/design/judge/round-5-pairwise-2.md"
 # (28) pairwise POSITIVE: both calls derive keep-challenger; flag agrees.
 jr_before="$(jr_lines)"
 if node "$run_log_mjs" --project "$jr_proj" record --round 5 --grader judge-subagent --basis "$jr_basis" --scores 4,4,4,4 --judge-report design/judge/round-5.md --gate pass $jr_legs --pairwise keep-challenger --pairwise-agrees yes --pairwise-reports design/judge/round-5-pairwise-1.md,design/judge/round-5-pairwise-2.md >"$work/judge-t28.log" 2>&1; then
@@ -3182,7 +3182,7 @@ sed -i -e '/^PENDING/d' -e 's/^basis:$/basis: fresh context, no production histo
   -e 's/— grader: \([^ ]*\) (?)/— grader: \1 (fresh context, no production history)/' \
   -e 's/^Motion: ? (motion-expert) — ?$/Motion: 4 (motion-expert) — hero reveal travels 24px in 220ms/' \
   "$jr_proj/design/judge/round-6-expert-motion.md"
-touch -d '2026-11-11 12:05' "$jr_proj/design/judge/round-6-expert-motion.md"
+touch -t 202611111205 "$jr_proj/design/judge/round-6-expert-motion.md"
 # (30) expert score MISMATCH: artifact says 4, flag claims 5 → exit 2.
 jr_reject "expert score differing from the expert artifact" "$work/judge-t30.log" "not the cited" \
   node "$run_log_mjs" --project "$jr_proj" record --round 6 --grader none --scores none --gate fail --expert-motion 5 --expert-motion-evidence "hero reveal travels 24px in 220ms" --expert-motion-report design/judge/round-6-expert-motion.md
@@ -3206,13 +3206,13 @@ jr_reject "land with no round record for its round" "$work/judge-t32.log" "has n
 jr_prep 7 absolute
 jr_fill_scores "$jr_proj/design/judge/round-7.md" 4 4 4 4
 printf 'Not an independent judge in this context; grade is gate green, vision not available.\n' >> "$jr_proj/design/judge/round-7.md"
-touch -d '2026-11-11 12:05' "$jr_proj/design/judge/round-7.md"
+touch -t 202611111205 "$jr_proj/design/judge/round-7.md"
 jr_reject "record citing a void (refusal-carrying) judge artifact" "$work/judge-t33.log" "refusal line" \
   node "$run_log_mjs" --project "$jr_proj" record --round 7 --grader judge-subagent --basis "$jr_basis" --scores 4,4,4,4 --judge-report design/judge/round-7.md --gate pass $jr_legs
 # (34) the same refusal line with a ZERO-WIDTH SPACE inserted inside it
 # is still a refusal line (the void check strips invisibles) → exit 2.
 sed -i "s/^Not an independent judge/Not\xe2\x80\x8b an independent judge/" "$jr_proj/design/judge/round-7.md"
-touch -d '2026-11-11 12:05' "$jr_proj/design/judge/round-7.md"
+touch -t 202611111205 "$jr_proj/design/judge/round-7.md"
 jr_reject "record citing a judge artifact with a ZWSP-split refusal line" "$work/judge-t34.log" "refusal line" \
   node "$run_log_mjs" --project "$jr_proj" record --round 7 --grader judge-subagent --basis "$jr_basis" --scores 4,4,4,4 --judge-report design/judge/round-7.md --gate pass $jr_legs
 # (35) UNICODE INSERTION, lenient side: a ZWSP inside the Round line's
@@ -3221,7 +3221,7 @@ jr_reject "record citing a judge artifact with a ZWSP-split refusal line" "$work
 jr_prep 7 cheap
 jr_fill_scores "$jr_proj/design/judge/round-7-cheap.md" 4 4 4 4
 sed -i 's/— grader: judge-subagent (/— grader: judge-\xe2\x80\x8bsubagent (/' "$jr_proj/design/judge/round-7-cheap.md"
-touch -d '2026-11-11 12:05' "$jr_proj/design/judge/round-7-cheap.md"
+touch -t 202611111205 "$jr_proj/design/judge/round-7-cheap.md"
 jr_before="$(jr_lines)"
 if node "$run_log_mjs" --project "$jr_proj" record --round 7 --grader judge-subagent --basis "$jr_basis" --scores 4,4,4,4 --judge-report design/judge/round-7-cheap.md --gate pass $jr_legs >"$work/judge-t35.log" 2>&1 && [[ "$(jr_lines)" == "$((jr_before + 1))" ]]; then
   ok "run-log records from a judge artifact with a ZWSP inserted in the Round-line grader label (invisible insertion stripped, lenient)"
@@ -3255,9 +3255,9 @@ fi
 # (round 8's judge dir already holds case (5)'s empty file, and
 # prepare never overwrites, so the graded family below uses round 9).
 printf '<html><body><main id="main"><h1>Other page</h1></main></body></html>\n' > "$jr_proj/design/page2.html"
-touch -d '2026-11-11 12:01' "$jr_proj/design/page2.html"
+touch -t 202611111201 "$jr_proj/design/page2.html"
 printf 'cross-check report r9\n' > "$jr_proj/design/crosscheck/round-9.md"
-touch -d '2026-11-11 12:02' "$jr_proj/design/crosscheck/round-9.md"
+touch -t 202611111202 "$jr_proj/design/crosscheck/round-9.md"
 if ! node "$run_log_mjs" --project "$jr_proj" crosscheck --slice d15 --round 9 --severe 0 --warning 0 --report design/crosscheck/round-9.md --checker security-expert --basis "$jr_basis" >"$work/judge-cc-9b.log" 2>&1; then
   fail "judge-artifact (D15): QC-round setup cross-check for round 9 failed — cases (38)–(42) will cascade; see $work/judge-cc-9b.log"
   cat "$work/judge-cc-9b.log" >&2 || true
@@ -3265,7 +3265,7 @@ fi
 jr_fill_expert() { # file domain label score evidence — fill an expert skeleton the way the expert would.
   sed -i -e '/^PENDING/d' -e 's/^basis:$/basis: fresh context, no production history/' \
     -e "s/^$2: ? ($3) — ?\$/$2: $4 ($3) — $5/" "$1"
-  touch -d '2026-11-11 12:05' "$1"
+  touch -t 202611111205 "$1"
 }
 # (38) F1 (QC A8): an expert-motion artifact prepared against page2,
 # cited on a NO-GRADE record whose page is page.html → exit 2 (before
@@ -3332,7 +3332,7 @@ fi
 jr_prep 9 cheap
 jr_fill_scores "$jr_proj/design/judge/round-9-cheap.md" 4 4 4 4
 sed -i 's/grader: judge-subagent (/grader: judge-sub\xd0\xb0gent (/' "$jr_proj/design/judge/round-9-cheap.md"
-touch -d '2026-11-11 12:05' "$jr_proj/design/judge/round-9-cheap.md"
+touch -t 202611111205 "$jr_proj/design/judge/round-9-cheap.md"
 jr_reject "record citing a judge artifact with a substituted look-alike in the Round-line grader token" "$work/judge-t42.log" "does not match its header" \
   node "$run_log_mjs" --project "$jr_proj" record --round 9 --grader judge-subagent --basis "$jr_basis" --scores 4,4,4,4 --judge-report design/judge/round-9-cheap.md --gate pass $jr_legs
 
@@ -3341,7 +3341,7 @@ jr_reject "record citing a judge artifact with a substituted look-alike in the R
 # fake shapes (runlog-check + best), and prepare containment.
 printf 'cross-check report r10\n' > "$jr_proj/design/crosscheck/round-10.md"
 printf 'cross-check report r11\n' > "$jr_proj/design/crosscheck/round-11.md"
-touch -d '2026-11-11 12:02' "$jr_proj/design/crosscheck/round-10.md" "$jr_proj/design/crosscheck/round-11.md"
+touch -t 202611111202 "$jr_proj/design/crosscheck/round-10.md" "$jr_proj/design/crosscheck/round-11.md"
 jr_cc2_ok=1
 for r in 10 11; do
   node "$run_log_mjs" --project "$jr_proj" crosscheck --slice d15 --round $r --severe 0 --warning 0 --report "design/crosscheck/round-$r.md" --checker security-expert --basis "$jr_basis" >"$work/judge-cc-$r.log" 2>&1 || jr_cc2_ok=0
@@ -3447,9 +3447,9 @@ for v in 1440 768 390; do printf 'PNG-%s-A' "$v" > "$esc_proj/design/screenshots
 printf 'GATE RESULT: PASS\n' > "$esc_proj/design/gate-leg1.log"
 printf '===== gate verdict: GREEN =====\n' > "$esc_proj/design/gate-leg2.log"
 printf 'cross-check report r1\n' > "$esc_proj/design/crosscheck/round-1.md"
-touch -d '2026-11-11 12:00' "$esc_proj/design/tokens.css"
-touch -d '2026-11-11 12:01' "$esc_proj/design/page.html"
-touch -d '2026-11-11 12:02' "$esc_proj/design/screenshots/"*.png "$esc_proj/design/gate-leg1.log" "$esc_proj/design/gate-leg2.log" "$esc_proj/design/crosscheck/round-1.md"
+touch -t 202611111200 "$esc_proj/design/tokens.css"
+touch -t 202611111201 "$esc_proj/design/page.html"
+touch -t 202611111202 "$esc_proj/design/screenshots/"*.png "$esc_proj/design/gate-leg1.log" "$esc_proj/design/gate-leg2.log" "$esc_proj/design/crosscheck/round-1.md"
 if ! node "$run_log_mjs" --project "$esc_proj" crosscheck --slice d15 --round 1 --severe 0 --warning 0 --report design/crosscheck/round-1.md --checker security-expert --basis "$jr_basis" >"$work/judge-cc-esc.log" 2>&1; then
   fail "judge-artifact (D15): escape-project setup cross-check failed — case (48) will cascade; see $work/judge-cc-esc.log"
   cat "$work/judge-cc-esc.log" >&2 || true
@@ -3499,9 +3499,9 @@ done
 printf 'GATE RESULT: PASS\n' > "$rp_proj/design/gate-leg1.log"
 printf '===== gate verdict: GREEN =====\n' > "$rp_proj/design/gate-leg2.log"
 for r in 1 2 3 4 5 12; do printf 'cross-check report r%s\n' "$r" > "$rp_proj/design/crosscheck/round-$r.md"; done
-touch -d '2026-11-11 12:00' "$rp_proj/design/tokens.css"
-touch -d '2026-11-11 12:01' "$rp_proj/design/page.html" "$rp_proj/design/page2.html"
-touch -d '2026-11-11 12:02' "$rp_proj/design/screenshots/"*.png "$rp_proj/design/screenshots-prev/"*.png "$rp_proj/design/gate-leg1.log" "$rp_proj/design/gate-leg2.log" "$rp_proj/design/crosscheck/"*.md
+touch -t 202611111200 "$rp_proj/design/tokens.css"
+touch -t 202611111201 "$rp_proj/design/page.html" "$rp_proj/design/page2.html"
+touch -t 202611111202 "$rp_proj/design/screenshots/"*.png "$rp_proj/design/screenshots-prev/"*.png "$rp_proj/design/gate-leg1.log" "$rp_proj/design/gate-leg2.log" "$rp_proj/design/crosscheck/"*.md
 rp_log="$rp_proj/design/run-log.jsonl"
 rp_lines() { if [[ -f "$rp_log" ]]; then grep -c . "$rp_log" || true; else printf '0'; fi; }
 rp_legs="--gate-leg1 design/gate-leg1.log --gate-leg2 design/gate-leg2.log --page design/page.html"
@@ -3710,9 +3710,9 @@ r3_mkproj() { # dir — tokens/page/page2/shots/legs + cross-checks rounds 1..3 
   printf 'GATE RESULT: PASS\n' > "$P/design/gate-leg1.log"
   printf '===== gate verdict: GREEN =====\n' > "$P/design/gate-leg2.log"
   for r in 1 2 3; do printf 'cross-check report r%s\n' "$r" > "$P/design/crosscheck/round-$r.md"; done
-  touch -d '2026-11-11 12:00' "$P/design/tokens.css"
-  touch -d '2026-11-11 12:01' "$P/design/page.html" "$P/design/page2.html"
-  touch -d '2026-11-11 12:02' "$P/design/screenshots/"*.png "$P/design/screenshots-prev/"*.png "$P/design/gate-leg1.log" "$P/design/gate-leg2.log" "$P/design/crosscheck/"*.md
+  touch -t 202611111200 "$P/design/tokens.css"
+  touch -t 202611111201 "$P/design/page.html" "$P/design/page2.html"
+  touch -t 202611111202 "$P/design/screenshots/"*.png "$P/design/screenshots-prev/"*.png "$P/design/gate-leg1.log" "$P/design/gate-leg2.log" "$P/design/crosscheck/"*.md
   for r in 1 2 3; do
     node "$run_log_mjs" --project "$P" crosscheck --slice r3 --round $r --severe 0 --warning 0 --report "design/crosscheck/round-$r.md" --checker security-expert --basis "$jr_basis" >"$work/r3-cc-$r.log" 2>&1 \
       || fail "judge-artifact (D15): round-3 project setup cross-check round $r failed — cases (61)–(68) using it will cascade; see $work/r3-cc-$r.log"
@@ -3899,7 +3899,7 @@ jr_fill_scores "$r3p/design/judge/round-1.md" 4 4 4 4
 node "$run_log_mjs" --project "$r3p" record --round 1 --grader judge-subagent --basis "$jr_basis" --scores 4,4,4,4 --judge-report design/judge/round-1.md --gate pass $r3_legs >"$work/r3-t67-setup.log" 2>&1 \
   || fail "judge-artifact (D15): round-3 B6 setup graded record failed — case (67) will cascade; see $work/r3-t67-setup.log"
 printf '<html><body><main id="main"><h1>Totally different page</h1></main></body></html>\n' > "$r3p/design/page.html"
-touch -d '2026-11-11 12:03' "$r3p/design/page.html"
+touch -t 202611111203 "$r3p/design/page.html"
 r3_v2_sha="$(sha256sum "$r3p/design/page.html" | cut -d' ' -f1)"
 python3 - "$r3p/design/run-log.jsonl" "$r3_v2_sha" <<'EOF'
 import json,sys
@@ -4683,7 +4683,7 @@ node "$run_log_mjs" --project "$r3p" record --round 2 --grader judge-subagent --
 node "$run_log_mjs" --project "$r3p" best >"$work/r6-t90a.log" 2>&1
 cp -r "$r3p" "$work/r6-x3v2"
 printf ':root { --bg: #000000; --ink: #ffffff; --space: 99px; }\nbody { background: var(--bg); color: var(--ink); }\n' > "$work/r6-x3v2/design/tokens.css"
-touch -d '2026-11-11 12:00' "$work/r6-x3v2/design/tokens.css"
+touch -t 202611111200 "$work/r6-x3v2/design/tokens.css"
 for k in 1 2 3; do
   node "$judge_report_mjs" --project "$work/r6-x3v2" prepare --round 2 --kind jury --index $k --family fam$k --grader judge-subagent --brief-type landing --mode full --page design/page.html --out "design/judge/alt-jury-$k.md" >"$work/r6-prep-alt-jury-$k.log" 2>&1 \
     || fail "judge-artifact (D15): round-6 X3 tokens-v2 juror prepare $k failed — case (90) will cascade; see $work/r6-prep-alt-jury-$k.log"
@@ -4731,7 +4731,7 @@ node "$run_log_mjs" --project "$r3p" land --slice r3 --round 2 --gate pass $r3_l
   || fail "judge-artifact (D15): round-6 X4 POSITIVE control failed — land on the genuine expert-carrying round was refused; see $work/r6-t91-pos.log"
 cp -r "$r3p" "$work/r6-x4v2"
 printf ':root { --bg: #000000; --ink: #ffffff; --space: 99px; }\nbody { background: var(--bg); color: var(--ink); }\n' > "$work/r6-x4v2/design/tokens.css"
-touch -d '2026-11-11 12:00' "$work/r6-x4v2/design/tokens.css"
+touch -t 202611111200 "$work/r6-x4v2/design/tokens.css"
 node "$judge_report_mjs" --project "$work/r6-x4v2" prepare --round 2 --kind expert-motion --brief-type landing --mode full --page design/page.html --out design/judge/alt-expert-motion.md >"$work/r6-prep-alt-expert.log" 2>&1 \
   || fail "judge-artifact (D15): round-6 X4 tokens-v2 expert prepare failed — case (91) will cascade; see $work/r6-prep-alt-expert.log"
 jr_fill_expert "$work/r6-x4v2/design/judge/alt-expert-motion.md" Motion motion-expert 5 "hero reveal travels 24px in 220ms"
@@ -4807,8 +4807,8 @@ r7_mkproj() {
   # 12:00, gate legs at 12:01, and jr_fill_scores touches the judge
   # artifact to 12:05 — every freshness chain (legs >= page, artifact
   # >= tokens) holds by construction.
-  touch -d '2026-11-11 12:00' "$p/design/tokens.css" "$p/design/page.html"
-  touch -d '2026-11-11 12:01' "$p/design/gate-leg1.log" "$p/design/gate-leg2.log"
+  touch -t 202611111200 "$p/design/tokens.css" "$p/design/page.html"
+  touch -t 202611111201 "$p/design/gate-leg1.log" "$p/design/gate-leg2.log"
   node "$run_log_mjs" --project "$p" lock --tokens design/tokens.css --refs "Ref A (verify.test)" --purpose "verify purpose" --approved-by human >/dev/null 2>&1 || return 1
   node "$run_log_mjs" --project "$p" crosscheck --slice r7 --round 1 --severe 0 --warning 0 --report design/cc.md --checker crosscheck-subagent --basis "separate agent instance, no production history" >/dev/null 2>&1 || return 1
   node "$judge_report_mjs" --project "$p" prepare --round 1 --kind absolute --grader muse-manager --brief-type landing --mode full --page design/page.html --shots design/screenshots/round-1-1440.png --locked-refs "Ref A (verify.test)" >/dev/null 2>&1 || return 1
@@ -5041,7 +5041,7 @@ if ! node "$runlog_check_mjs" "$r3p/design/run-log.jsonl" >"$work/r8-t102-check1
 fi
 printf 'GATE RESULT: PASS\n(round 2 gate run)\n' > "$r3p/design/gate-leg1.log"
 printf '===== gate verdict: GREEN =====\n(round 2 gate run)\n' > "$r3p/design/gate-leg2.log"
-touch -d '2026-11-11 12:03' "$r3p/design/gate-leg1.log" "$r3p/design/gate-leg2.log"
+touch -t 202611111203 "$r3p/design/gate-leg1.log" "$r3p/design/gate-leg2.log"
 node "$run_log_mjs" --project "$r3p" record --round 2 --grader none --scores none --gate pass $r3_legs >"$work/r8-t102-record2.log" 2>&1 \
   || fail "judge-artifact (D15): round-8 C4 genuine round-2 no-grade record after leg rotation failed — case (102) will cascade; see $work/r8-t102-record2.log"
 node "$run_log_mjs" --project "$r3p" land --slice r3 --round 2 --gate pass $r3_legs >"$work/r8-t102-land2.log" 2>&1 \
@@ -5153,7 +5153,7 @@ if ! node "$runlog_check_mjs" "$r3p/design/run-log.jsonl" >"$work/r10-t105-check
 fi
 printf 'GATE RESULT: PASS\n(round 2 gate run)\n' > "$r3p/design/gate-leg1.log"
 printf '===== gate verdict: GREEN =====\n(round 2 gate run)\n' > "$r3p/design/gate-leg2.log"
-touch -d '2026-11-11 12:03' "$r3p/design/gate-leg1.log" "$r3p/design/gate-leg2.log"
+touch -t 202611111203 "$r3p/design/gate-leg1.log" "$r3p/design/gate-leg2.log"
 node "$runlog_check_mjs" "$r3p/design/run-log.jsonl" >"$work/r10-t105-check2.log" 2>&1
 r10_check_rc=$?
 node "$judge_report_mjs" --project "$r3p" prepare --round 1 --kind regrade --grader other-model --brief-type landing --mode full --page design/page.html >"$work/r10-prep-1-regrade.log" 2>&1 \
