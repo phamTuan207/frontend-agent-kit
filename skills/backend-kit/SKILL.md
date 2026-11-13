@@ -757,8 +757,11 @@ Deno.serve(async (req) => {
 ```
 
 The pgvector leg's store (created once by the Integrator; seed in
-**small batches** — the fixed 2 GB disk goes read-only at 95% and WAL
-balloons on bulk loads):
+**small batches** — watch the measured disk % and abort ingestion at
+70% of it; WAL balloons on bulk loads. Do not assert a fixed disk size:
+the official pricing page lists Free as 500 MB database size
+(coordinator ruling A5, 20:00) — the 'fixed 2 GB disk / read-only at
+95%' figure is NOT established):
 
 ```sql
 create extension if not exists vector;
