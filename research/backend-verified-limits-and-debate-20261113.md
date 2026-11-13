@@ -56,10 +56,12 @@
   `vector` ≤ 2,000 dims, `halfvec` ≤ 4,000 dims — Gemini embeddings at
   3,072 dims **cannot** be indexed as plain `vector`; pin 1,536 output
   dims or use halfvec (https://supabase.com/docs/guides/ai/vector-indexes).
-- Disk is a **fixed 2 GB**; at 95% the database goes **read-only**
-  (writes fail). The "500 MB" figure is an org fair-use quota, NOT the
-  read-only tripwire. WAL can exceed 1 GB during bulk imports/index
-  builds — seed in small batches and watch disk %.
+- Disk: the official pricing page lists Free as **500 MB database
+  size** per project (coordinator ruling A5, 20:00). The "fixed 2 GB
+  disk / read-only at 95%" figure is **NOT established** — do not plan
+  against it; watch the measured disk % and abort ingestion at 70% of
+  it. WAL can exceed 1 GB during bulk imports/index builds — seed in
+  small batches and watch disk %.
 - Secrets via `supabase secrets set` work on Free (owner/admin role);
   2 active projects max.
 
@@ -102,8 +104,9 @@
 **Migga's counters on pgvector — answered and adopted:** embedding
 price is $0.00 on Free (verified) — the real cost is the unpublished
 embedding QUOTA plus Batch being unavailable, so the shadow index
-stays small and ingests via standard calls; the binding Supabase
-storage limit is the 2 GB disk / 95% read-only rule, not 500 MB.
+stays small and ingests via standard calls; the binding Supabase storage limit is the 500 MB database size per
+the official pricing page (ruling A5), with the measured disk % watched
+between batches — the "2 GB disk / 95% read-only" figure is NOT established.
 
 ## 3. Still open for the coordinator
 
