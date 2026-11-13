@@ -198,7 +198,15 @@ export default defineSchema({
       v.literal("done"),
       v.literal("error"),
     ),
-    inputText: v.string(),
+    source: v.union(
+      v.literal("demo"),
+      v.literal("share-link"),
+      v.literal("first-user"),
+      v.literal("pitch"),
+    ), // D51: where the run came from — the live log and the first-users wall read this same table
+    stub: v.boolean(), // D51: true for seeded/canned runs — excluded from the pitch number
+    inputHash: v.string(), // SHA-256 of the input, computed server-side in createRun — the raw input is NEVER stored (Backend charter: no raw personal input)
+    inputChars: v.number(),
     output: v.optional(v.any()),
     error: v.optional(v.string()),
     model: v.optional(v.string()),
@@ -219,10 +227,18 @@ export default defineSchema({
     ok: v.boolean(),
     detail: v.optional(v.string()),
   }),
+  counter: defineTable({
+    key: v.string(), // always "runs" — exactly one counter record (D51)
+    completedReal: v.number(), // completed real-AI runs only; stub runs never increment it
+  }).index("by_key", ["key"]),
 });
 ```
 
-Rules: `runs` is append-only — never overwrite the last result.
+Rules: `runs` is append-only — never overwrite the last result. The
+`counter` table holds exactly one record (`key: "runs"`), created by
+the first `finishRun` that needs it; it is a derived tally of
+`runs` (status `done`, `stub: false`), never an input — if it ever
+disagrees with the table, the table wins and the record is rebuilt.
 `resultJson` as a string is preferred over `v.any()` where the shape is
 known (schema validation is the one safety net); `v.any()` for `output`
 is accepted here only because the idea's JSON shape is not settled yet —
@@ -235,13 +251,27 @@ full-table scan (32,000 docs scanned per query is the cap).
 - `getRunByShareId` (query): lookup by the `by_shareId` index, return
   the document or `null`. The phone subscribes to this.
 - `createRun` (mutation, public — the client calls it): insert the
-  `pending` run. Dedup on `idempotencyKey` inside the same transaction:
-  look the key up on its index first, return the existing run on a hit.
+  `pending` run. Args carry the raw `inputText` in transit only — the
+  mutation SHA-256-hashes it and stores `inputHash` + `inputChars`,
+  never the text itself (Backend charter: no raw personal input at
+  rest). The client also passes `source` (D51) and `stub` (seeded runs
+  only — live client calls always pass `stub: false`). Dedup on
+  `idempotencyKey` inside the same transaction: look the key up on its
+  index first, return the existing run on a hit.
 - `finishRun` / `failRun` (public mutations — the client calls them after
   the Edge Function returns; each call must pass `runId`, `shareId`, AND
   `idempotencyKey`, and the mutation verifies the key pair matches the
   stored run before patching, so one client cannot patch another
-  client's run): patch status + output / error.
+  client's run): patch status + output / error. `finishRun` also
+  increments the single `counter` record (`completedReal`) in the same
+  transaction when the run's `stub` is false — the counter counts
+  completed real-AI runs only, and a run patched twice still counts
+  once (increment only on the pending → done transition).
+- `getCounter` (query, public): return the `counter` record's
+  `completedReal` (0 when no record exists yet). This is the pitch
+  number: stub runs are excluded by construction, and the live log /
+  first-users wall read `runs` filtered by `source` — one table, one
+  counter, no second source of truth (D51).
   // public: the phone is the only writer of its own run's result
   (the Edge Function never touches Convex — see §4).
 - `checkCap` (mutation, public): atomically increments the day's
@@ -348,11 +378,12 @@ export function useAiClient() {
   const checkCap = useMutation(api.runs.checkCap);
   const edgeUrl = process.env.EXPO_PUBLIC_EDGE_FUNCTION_URL!;
   return {
-    run: async (args: { shareId: string; inputText: string; schema: object; systemPrompt: string }) => {
+    run: async (args: { shareId: string; inputText: string; schema: object; systemPrompt: string; source?: "demo" | "share-link" | "first-user" | "pitch" }) => {
       const idempotencyKey = crypto.randomUUID();
-      // createRun stores only shareId/inputText/idempotencyKey — schema and
-      // systemPrompt go to the Edge Function only, never into the run doc.
-      const runId = await createRun({ shareId: args.shareId, inputText: args.inputText, idempotencyKey });
+      // createRun stores only shareId/source/stub/idempotencyKey + the input
+      // HASH — schema and systemPrompt go to the Edge Function only, never
+      // into the run doc, and the raw input is never stored at all (D51).
+      const runId = await createRun({ shareId: args.shareId, source: args.source ?? "demo", stub: false, inputText: args.inputText, idempotencyKey });
       const cap = await checkCap({});
       if (!cap.allowed) { await failRun({ runId, shareId: args.shareId, idempotencyKey, error: "USAGE_CAP" }); return { runId, error: "USAGE_CAP" }; }
       const callEdge = () =>
@@ -431,7 +462,7 @@ on a 4xx; daily cap 200 AI calls via the server-side counter.
   opens on that `shareId`. If the live call fails in front of the judges,
   the seeded result is already on screen. Cost: one AI call.
 - **Seed command.** `convex/seed.ts` internal mutation: deletes all
-  `isDemo: true` rows and inserts the seed (3 finished runs, 1 failed
+  `stub: true` rows and inserts the seed (3 finished runs, 1 failed
   run with a retry button, 1 queued run, 1 share code). Reseed: `npx
   convex run seed:reset --prod`. Every seeded `resultText` is real
   output from a real run of the actual model during rehearsal — never
@@ -537,8 +568,8 @@ on a 4xx; daily cap 200 AI calls via the server-side counter.
 | File | What it is |
 |---|---|
 | `SKILL.md` (this file) | Router order, pins, ban list, contract, runbook, traps. All code is inline in §4–§6 — copy from the section named, not from a `templates/` directory (no template files ship with this skill). |
-| §4.1 | `runs` + `usage` + `health` schema — copy into `convex/schema.ts`. |
-| §4.2 | `getRunByShareId`, `createRun`, `finishRun`, `failRun`, `checkCap` — copy into `convex/runs.ts`. |
+| §4.1 | `runs` + `usage` + `health` + `counter` schema (D51) — copy into `convex/schema.ts`. |
+| §4.2 | `getRunByShareId`, `createRun`, `finishRun`, `failRun`, `checkCap`, `getCounter` — copy into `convex/runs.ts`. |
 | §4.3 | Supabase Edge Function `ai-run` — copy into `supabase/functions/ai-run/index.ts`. |
 | §4.4 | The transport seam (`useAiClient`) — copy into `lib/aiClient.ts`. Uses `fetchJson` from the networking-fetch skill (`lib/fetch-with-timeout.ts`). |
 | §6 | `seed:reset` spec + heartbeat cron spec — write from the spec in §6 (one internal mutation, one cron line); no copy-paste source ships in this skill. |
