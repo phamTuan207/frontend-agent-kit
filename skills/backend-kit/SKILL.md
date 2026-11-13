@@ -485,15 +485,19 @@ seeded run exactly like the other AI errors (§5) — the attempt is
 logged in the run document, never silently downgraded to a plain
 answer presented as fact.
 
-**Two retrieval legs, one primary.** `retrieve()` tries the File
-Search leg first and the pgvector shadow second ONLY when the File
-Search leg is not implemented/configured (typed `NotImplementedError`)
-— a real File Search failure (429, timeout, 5xx) is a retrieval
-failure, not a switch trigger. Which leg is PRIMARY is chosen at the
-08:30 gate (below); the shadow is a tested-once config switch, not a
-second system. The pgvector leg returns OUR OWN `source_id`s by
-construction, so the fallback carries the citation story, not just
-the retrieval.
+**Two retrieval legs, one primary per deployment.** The primary leg
+is chosen at the 08:30 gate and set as env (`RETRIEVAL_LEG`) — the
+other leg is a tested-once switch (flip the env, re-run the eval set),
+not a per-request fallback. The legs differ in shape: the **pgvector
+leg** retrieves BEFORE generation and injects a capped sources block
+(its citations are our own `source_id`s by construction); the **File
+Search leg** is fused INTO the Gemini call as a tool — its citations
+are harvested from the response's `FileCitation` annotations (shape
+verified 2026-11-13 against the official guide, the Interactions
+reference, and the installed SDK types; it carries title/URI but **no
+retrieved-text snippet**). On the File Search leg, Groq cannot ground,
+so a failed Gemini chain returns `AI_UNGROUNDED` rather than a plain
+answer wearing a grounded label.
 
 ```ts
 // Deno.serve — ai-run WITH the D73 Phase 1 retrieval leg. This block
@@ -507,6 +511,10 @@ import Groq from "npm:groq-sdk@1.6.0";
 
 const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-3.5-flash-lite";
 const GROQ_MODEL = Deno.env.get("GROQ_MODEL") ?? "openai/gpt-oss-120b";
+// D73: ONE primary retrieval leg per deployment, chosen at the 08:30
+// gate and set as env — switching legs = flip env + re-run the eval set.
+const RETRIEVAL_LEG = Deno.env.get("RETRIEVAL_LEG") ?? "pgvector"; // "pgvector" | "file-search"
+const FILE_SEARCH_STORE = Deno.env.get("FILE_SEARCH_STORE_NAME") ?? "";
 const TOP_K = 5; // server constant — never from the request (D73 rule)
 const CONTEXT_CAP_CHARS = 6000; // retrieved context cap, separate from the 4,000-char input cap
 
@@ -523,16 +531,48 @@ const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
 const fail = (error: string, status: number) =>
   new Response(JSON.stringify({ error, code: error }), { status });
 
-// TODO(D73 Phase 2): File Search leg. The interactions surface used
-// for generation has no documented file-search tool/config in
-// @google/genai 3.3.0, and the citation payload shape was NOT verified
-// against official sources on 2026-11-13 — so this seam stays
-// unimplemented rather than inventing SDK options. The handler routes
-// NotImplementedError to the pgvector leg. Implementing it means
-// returning the retrieved chunks mapped to Citation[] (sourceId =
-// store document id) after the 08:30 live check.
-async function retrieveViaFileSearch(_query: string, _corpusId: string): Promise<Citation[]> {
-  throw new NotImplementedError("FILE_SEARCH_NOT_IMPLEMENTED");
+// File Search leg (VERIFIED 2026-11-13 against the official File Search
+// guide, the Interactions API reference, and the installed @google/genai
+// 3.3.0 types): on the Interactions API, File Search is a tool on the
+// generation call itself — { type: "file_search",
+// file_search_store_names, top_k, metadata_filter } — and attribution
+// returns as FileCitation annotations on the model_output step's text
+// blocks: { type: "file_citation", document_uri?, file_name?, source?,
+// page_number?, media_id?, start_index?, end_index? }. There is NO
+// retrieved-text snippet on this API (the `source` field's semantics are
+// undefined in the docs — do not build on it), so this leg's citations
+// carry title/uri only and `snippet` stays undefined. Reading only
+// `output_text` LOSES the citations — harvest the steps. (The
+// generateContent API returns a richer shape —
+// groundingMetadata.groundingChunks[].retrievedContext { title, uri,
+// text } — switching the generation API to get snippets is a Phase 2
+// decision, not a silent swap.)
+const fileSearchTool = {
+  type: "file_search" as const,
+  file_search_store_names: [FILE_SEARCH_STORE],
+  top_k: TOP_K,
+};
+function harvestCitations(interaction: unknown): Citation[] {
+  const seen = new Set<string>();
+  const out: Citation[] = [];
+  const steps = (interaction as { steps?: unknown[] })?.steps ?? [];
+  for (const step of steps) {
+    const s = step as { type?: string; content?: unknown[] };
+    if (s?.type !== "model_output") continue;
+    for (const block of s.content ?? []) {
+      const b = block as { type?: string; annotations?: unknown[] };
+      if (b?.type !== "text") continue;
+      for (const ann of b.annotations ?? []) {
+        const a = ann as { type?: string; document_uri?: string; file_name?: string };
+        if (a?.type !== "file_citation") continue;
+        const sourceId = a.document_uri ?? a.file_name ?? "file-search";
+        if (seen.has(sourceId)) continue;
+        seen.add(sourceId);
+        out.push({ sourceId, title: a.file_name });
+      }
+    }
+  }
+  return out;
 }
 
 // pgvector shadow leg: embed the query (Gemini embeddings, REST), then
@@ -596,14 +636,10 @@ async function retrieveViaPgvector(query: string, corpusId: string): Promise<Cit
 }
 
 async function retrieve(query: string, corpusId: string): Promise<Citation[]> {
-  try {
-    return await withTimeout(retrieveViaFileSearch(query, corpusId), 15_000);
-  } catch (e) {
-    if (e instanceof NotImplementedError) {
-      return await withTimeout(retrieveViaPgvector(query, corpusId), 15_000);
-    }
-    throw e;
-  }
+  // pgvector leg only — pre-generation retrieval. The File Search leg
+  // does not pass through here: its retrieval is fused into the Gemini
+  // call and its citations are harvested from the response.
+  return await withTimeout(retrieveViaPgvector(query, corpusId), 15_000);
 }
 
 Deno.serve(async (req) => {
@@ -619,7 +655,7 @@ Deno.serve(async (req) => {
   const grounded = body?.mode === "grounded";
   const corpusId = typeof body?.corpusId === "string" && body.corpusId.trim() ? body.corpusId.trim() : null;
   let citations: Citation[] = [];
-  if (grounded) {
+  if (grounded && RETRIEVAL_LEG !== "file-search") {
     try {
       if (!corpusId) throw new Error("NO_CORPUS");
       citations = await retrieve(text, corpusId);
@@ -636,17 +672,22 @@ Deno.serve(async (req) => {
       .join("\n");
     contextBlock = "\n\nSources (answer from these only):\n" + joined.slice(0, CONTEXT_CAP_CHARS);
   }
-  const callGemini = async () => {
+  const callGemini = async (): Promise<{ output: unknown; harvested?: Citation[] }> => {
     const ai = new GoogleGenAI({ apiKey: Deno.env.get("GEMINI_API_KEY") });
+    const useTool = grounded && RETRIEVAL_LEG === "file-search" && !!FILE_SEARCH_STORE;
     const interaction = await withTimeout(
       ai.interactions.create({
         model: GEMINI_MODEL,
         input: body.systemPrompt + contextBlock + "\n\n" + text,
         response_format: { type: "text", mime_type: "application/json", schema },
+        ...(useTool ? { tools: [fileSearchTool] } : {}),
       }),
       15_000,
     );
-    return JSON.parse(interaction.output_text ?? "{}");
+    return {
+      output: JSON.parse(interaction.output_text ?? "{}"),
+      harvested: useTool ? harvestCitations(interaction) : undefined,
+    };
   };
   const done = (output: unknown, model: string) => {
     // Belt-and-braces: a grounded answer with zero citations is not a
@@ -654,13 +695,21 @@ Deno.serve(async (req) => {
     if (grounded && citations.length === 0) return fail("AI_UNGROUNDED", 502);
     return Response.json({ status: "done", output, model, mode: grounded ? "grounded" : "plain", citations });
   };
+  const runGemini = async () => {
+    const r = await callGemini();
+    if (r.harvested) citations = r.harvested;
+    return r.output;
+  };
   try {
-    return done(await callGemini(), GEMINI_MODEL);
+    return done(await runGemini(), GEMINI_MODEL);
   } catch (e) {
     await new Promise((r) => setTimeout(r, 2000)); // D52: one retry, 2 s back-off
     try {
-      return done(await callGemini(), GEMINI_MODEL);
+      return done(await runGemini(), GEMINI_MODEL);
     } catch (e1) {
+      // Groq has no File Search: on that leg a failed Gemini chain is
+      // AI_UNGROUNDED, never a silently-plain fallback answer.
+      if (grounded && RETRIEVAL_LEG === "file-search") return fail("AI_UNGROUNDED", 502);
       try {
         const groq = new Groq({ apiKey: Deno.env.get("GROQ_API_KEY") });
         const res = await withTimeout(
