@@ -205,6 +205,17 @@ export default defineSchema({
       v.literal("pitch"),
     ), // D51: where the run came from — the live log and the first-users wall read this same table
     stub: v.boolean(), // D51: true for seeded/canned runs — excluded from the pitch number
+    mode: v.union(v.literal("grounded"), v.literal("plain")), // D73: fixed at createRun — the endpoint's authority for retrieval; never a client preference
+    corpusId: v.optional(v.string()), // D73: server-side corpus scope for grounded runs
+    citations: v.optional(
+      v.array(
+        v.object({
+          sourceId: v.string(),
+          title: v.optional(v.string()),
+          snippet: v.optional(v.string()),
+        }),
+      ),
+    ), // D73: retrieval-built citations, stored by finishRun; a grounded run without them is not a result
     inputHash: v.string(), // SHA-256 of the input, computed server-side in createRun — the raw input is NEVER stored (Backend charter: no raw personal input)
     inputChars: v.number(),
     output: v.optional(v.any()),
@@ -267,6 +278,9 @@ full-table scan (32,000 docs scanned per query is the cap).
   transaction when the run's `stub` is false — the counter counts
   completed real-AI runs only, and a run patched twice still counts
   once (increment only on the pending → done transition).
+  `finishRun` additionally verifies the returned `mode` against the
+  stored run's mode and stores the returned `citations` — a mode
+  mismatch fails the patch, exactly like a key mismatch (D73).
 - `getCounter` (query, public): return the `counter` record's
   `completedReal` (0 when no record exists yet). This is the pitch
   number: stub runs are excluded by construction, and the live log /
@@ -405,16 +419,16 @@ export function useAiClient() {
   const checkCap = useMutation(api.runs.checkCap);
   const edgeUrl = process.env.EXPO_PUBLIC_EDGE_FUNCTION_URL!;
   return {
-    run: async (args: { shareId: string; inputText: string; schema: object; systemPrompt: string; source?: "demo" | "share-link" | "first-user" | "pitch" }) => {
+    run: async (args: { shareId: string; inputText: string; schema: object; systemPrompt: string; source?: "demo" | "share-link" | "first-user" | "pitch"; mode?: "grounded" | "plain"; corpusId?: string }) => {
       const idempotencyKey = crypto.randomUUID();
       // createRun stores only shareId/source/stub/idempotencyKey + the input
       // HASH — schema and systemPrompt go to the Edge Function only, never
       // into the run doc, and the raw input is never stored at all (D51).
-      const runId = await createRun({ shareId: args.shareId, source: args.source ?? "demo", stub: false, inputText: args.inputText, idempotencyKey });
+      const runId = await createRun({ shareId: args.shareId, source: args.source ?? "demo", stub: false, mode: args.mode ?? "plain", corpusId: args.corpusId, inputText: args.inputText, idempotencyKey });
       const cap = await checkCap({});
       if (!cap.allowed) { await failRun({ runId, shareId: args.shareId, idempotencyKey, error: "USAGE_CAP" }); return { runId, error: "USAGE_CAP" }; }
       const callEdge = () =>
-        fetchJson<{ status: string; output: unknown; model: string }>(edgeUrl, {
+        fetchJson<{ status: string; output: unknown; model: string; mode?: string; citations?: { sourceId: string; title?: string; snippet?: string }[] }>(edgeUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...args, idempotencyKey }),
@@ -423,7 +437,7 @@ export function useAiClient() {
         e instanceof ApiError
           ? (e.code ?? (e.status === 400 ? "INVALID_INPUT" : "AI_UNAVAILABLE"))
           : (e instanceof Error && e.message.startsWith("Request timed out") ? "AI_TIMEOUT" : "AI_UNAVAILABLE");
-      let data: { status: string; output: unknown; model: string };
+      let data: { status: string; output: unknown; model: string; mode?: string; citations?: { sourceId: string; title?: string; snippet?: string }[] };
       try {
         data = await callEdge();
       } catch (e) {
@@ -435,8 +449,8 @@ export function useAiClient() {
         await failRun({ runId, shareId: args.shareId, idempotencyKey, error: code });
         return { runId, error: code };
       }
-      await finishRun({ runId, shareId: args.shareId, idempotencyKey, output: data.output, model: data.model });
-      return { runId, status: "done", output: data.output, model: data.model };
+      await finishRun({ runId, shareId: args.shareId, idempotencyKey, output: data.output, model: data.model, mode: data.mode, citations: data.citations });
+      return { runId, status: "done", output: data.output, model: data.model, mode: data.mode, citations: data.citations };
     },
   };
 }
@@ -732,10 +746,14 @@ not on build morning):**
 
 **Request** (Edge Function POST body): `{ shareId: string,
 idempotencyKey: string, inputText: string (1..4000 chars),
-systemPrompt: string, schema: object /* IDEA: the idea's JSON shape */ }`.
+systemPrompt: string, schema: object /* IDEA: the idea's JSON shape */,
+mode: "grounded" | "plain", corpusId?: string /* both copied from the
+run record — mode is fixed at createRun, §4.1 */ }`.
 
 **Response (success):** `{ status: "done", output: { /* IDEA */ },
-model: string }` — flat structure, no nesting deeper than 2 levels,
+model: string, mode: string, citations: Citation[] }` — `mode` echoes
+the mode actually used; `citations` is `[]` for plain runs and
+non-empty for every grounded `done` (§4.5). Flat structure, no nesting deeper than 2 levels,
 output capped at 800 tokens (`max_tokens: 800` on the Groq call;
 Gemini output cap is enforced by the schema + prompt — the exact
 `maxOutputTokens` option on `interactions.create` is CHƯA ĐỌC, do not
@@ -749,6 +767,7 @@ assume it exists).
 | Gemini key missing / invalid | 502 `{ error: "AI_UNAVAILABLE", code: "AI_UNAVAILABLE" }` (after Groq also fails) | Show "AI is unavailable — showing the last saved result" + seeded run |
 | Rate limit / 5xx | Endpoint retries the primary once after a 2 s back-off, then falls back to Groq (D52); only if all fail: 502 `{ error: "AI_RATE_LIMITED", code: "AI_RATE_LIMITED" }` | Do not retry — show the last saved result (cached last-good, D52); if none, the seeded run |
 | Provider timeout (>15 s) | Endpoint races every provider call against 15 s (D50); a timed-out primary still gets its one D52 retry, then Groq. Client aborts at 30 s; run patched `status: "error"`, `error: "AI_TIMEOUT"` | Do not retry — last saved result, else seeded run |
+| Grounded run: retrieval failed or zero citations | 502 `{ error: "AI_UNGROUNDED", code: "AI_UNGROUNDED" }` (§4.5) | Show the last saved / seeded result; the attempt is logged on the run — never present a plain answer as grounded |
 | Usage cap hit | `checkCap` refuses before any AI call, `error: "USAGE_CAP"` | Show seeded result; do not retry |
 | Network drop mid-call | Edge Function may still complete server-side | On `AppState` active, re-query by `shareId`; if `status: "done"`, show it — never fire a duplicate call blindly |
 
@@ -893,6 +912,7 @@ on a 4xx; daily cap 200 AI calls via the server-side usage counter
 | §4.2 | `getRunByShareId`, `createRun`, `finishRun`, `failRun`, `checkCap`, `getCounter` — copy into `convex/runs.ts`. |
 | §4.3 | Supabase Edge Function `ai-run` — copy into `supabase/functions/ai-run/index.ts`. |
 | §4.4 | The transport seam (`useAiClient`) — copy into `lib/aiClient.ts`. Uses `fetchJson` from the networking-fetch skill (`lib/fetch-with-timeout.ts`). |
+| §4.5 | Retrieval leg (D73 Phase 1) — REPLACES §4.3 as the copy source for `supabase/functions/ai-run/index.ts`; the pgvector SQL block is run once by the Integrator to create the shadow store. |
 | §6 | `seed:reset` spec + heartbeat cron spec — write from the spec in §6 (one internal mutation, one cron line); no copy-paste source ships in this skill. |
 | §7 | Build-day runbook — read §7 as the checklist. |
 
