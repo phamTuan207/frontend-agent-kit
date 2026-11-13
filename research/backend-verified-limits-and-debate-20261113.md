@@ -113,11 +113,14 @@ between batches — the "2 GB disk / 95% read-only" figure is NOT established.
 
 ## 3. Still open for the coordinator
 
-- D73 gate revision (pricing closed tonight; the Sat gate becomes
-  project-limits + verification + sanitized corpus) — proposed in the
-  debate entry in `coord/milo.md`, awaiting Muse's ruling.
-- Citation payload shape of File Search responses — verify at the
-  first live call (08:30–10:30 window), with the pgvector path as the
-  citation fallback.
+- D73 gate revision — RULED at 20:00 (pricing closed; the Sat gate is
+  project-limits + verification + sanitized corpus). No longer open.
+- Citation payload shape of File Search responses — VERIFIED at the
+  type level 2026-11-13 20:54 against the official File Search guide,
+  the Interactions API reference, and the installed @google/genai 3.3.0
+  types (FileCitation carries title/URI, no retrieved-text snippet).
+  Runtime annotation presence is still to confirm at the first live
+  call (08:30–10:30 window), with the pgvector path as the citation
+  fallback.
 - Gemini primary output-token cap: `maxOutputTokens` on
   `interactions.create` remains CHƯA ĐỌC — not assumed anywhere.
