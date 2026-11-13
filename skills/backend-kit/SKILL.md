@@ -444,6 +444,290 @@ export function useAiClient() {
 // undefined = loading (render a skeleton, never "no data"); null = no such run.
 ```
 
+### 4.5 Retrieval leg (D73 Phase 1) — grounded answers, citations or it is not a fact
+
+Phase 1 of D73, landed the night before build day. The endpoint stops
+being a bare model call for grounded runs: a run created with
+`mode: "grounded"` is answered from the team's own corpus, and its
+result carries the citations that prove it. Phase 2 (the File Search
+leg's live verification) stays gated on the build-day 08:30 check —
+see the gate rules at the end of this section.
+
+**Mode is a server-side fact, not a client preference.** The mode is
+fixed at `createRun` and stored on the run (§4.1: `mode`, `corpusId`).
+The client copies both into the endpoint call from its own run record;
+`finishRun` verifies the returned `mode` and `citations` against the
+stored run exactly like the idempotency-key pair (§4.2) — a tampered
+or mismatched mode fails the patch. The envelope echoes the mode
+actually used on every response. A plain answer is labelled plain; it
+is never dressed up as grounded.
+
+**The citation rule (D73's core).** Citations are built from retrieval
+results, never parsed out of model prose. A grounded run whose
+retrieval returns zero citations — or whose retrieval fails — returns
+`AI_UNGROUNDED` (502) and the run is patched `error` by the client
+(§4.4). On screen, `AI_UNGROUNDED` falls back to the last-good /
+seeded run exactly like the other AI errors (§5) — the attempt is
+logged in the run document, never silently downgraded to a plain
+answer presented as fact.
+
+**Two retrieval legs, one primary.** `retrieve()` tries the File
+Search leg first and the pgvector shadow second ONLY when the File
+Search leg is not implemented/configured (typed `NotImplementedError`)
+— a real File Search failure (429, timeout, 5xx) is a retrieval
+failure, not a switch trigger. Which leg is PRIMARY is chosen at the
+08:30 gate (below); the shadow is a tested-once config switch, not a
+second system. The pgvector leg returns OUR OWN `source_id`s by
+construction, so the fallback carries the citation story, not just
+the retrieval.
+
+```ts
+// Deno.serve — ai-run WITH the D73 Phase 1 retrieval leg. This block
+// REPLACES the §4.3 handler as the copy source for
+// supabase/functions/ai-run/index.ts (§4.3 remains the pre-D73
+// reference). Secrets: GEMINI_API_KEY, GROQ_API_KEY, GEMINI_MODEL,
+// GROQ_MODEL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (server-side
+// only — the service-role key never reaches the client bundle).
+import { GoogleGenAI } from "npm:@google/genai@3.3.0";
+import Groq from "npm:groq-sdk@1.6.0";
+
+const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-3.5-flash-lite";
+const GROQ_MODEL = Deno.env.get("GROQ_MODEL") ?? "openai/gpt-oss-120b";
+const TOP_K = 5; // server constant — never from the request (D73 rule)
+const CONTEXT_CAP_CHARS = 6000; // retrieved context cap, separate from the 4,000-char input cap
+
+type Citation = { sourceId: string; title?: string; snippet?: string };
+class NotImplementedError extends Error {}
+
+const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
+  Promise.race([
+    p,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("AI_TIMEOUT")), ms)
+    ),
+  ]);
+const fail = (error: string, status: number) =>
+  new Response(JSON.stringify({ error, code: error }), { status });
+
+// TODO(D73 Phase 2): File Search leg. The interactions surface used
+// for generation has no documented file-search tool/config in
+// @google/genai 3.3.0, and the citation payload shape was NOT verified
+// against official sources on 2026-11-13 — so this seam stays
+// unimplemented rather than inventing SDK options. The handler routes
+// NotImplementedError to the pgvector leg. Implementing it means
+// returning the retrieved chunks mapped to Citation[] (sourceId =
+// store document id) after the 08:30 live check.
+async function retrieveViaFileSearch(_query: string, _corpusId: string): Promise<Citation[]> {
+  throw new NotImplementedError("FILE_SEARCH_NOT_IMPLEMENTED");
+}
+
+// pgvector shadow leg: embed the query (Gemini embeddings, REST), then
+// the match_chunks RPC — the corpus filter lives in SQL, server-side.
+async function retrieveViaPgvector(query: string, corpusId: string): Promise<Citation[]> {
+  const geminiKey = Deno.env.get("GEMINI_API_KEY");
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!geminiKey || !supabaseUrl || !serviceRoleKey || !corpusId) {
+    throw new Error("RETRIEVAL_NOT_CONFIGURED");
+  }
+  const fetchWithTimeout = async (url: string, init: RequestInit): Promise<Response> => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15_000);
+    try {
+      return await fetch(url, { ...init, signal: ctrl.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  // TODO(verify at first live call): `outputDimensionality` on the
+  // embedContent endpoint — documented for the Gemini embedding
+  // models; if it is ignored, the returned vector is 3,072-dim and
+  // the length check below fails loud instead of mis-ranking.
+  const embedRes = await fetchWithTimeout(
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
+      body: JSON.stringify({
+        model: "models/gemini-embedding-2",
+        content: { parts: [{ text: query }] },
+        outputDimensionality: 1536, // PINNED: pgvector `vector` indexes cap at 2,000 dims
+      }),
+    },
+  );
+  if (!embedRes.ok) throw new Error(`EMBED_FAILED_${embedRes.status}`);
+  const embedJson = await embedRes.json();
+  // ASSUMPTION: response shape is { embedding: { values: number[] } }.
+  const values: number[] = embedJson?.embedding?.values ?? [];
+  if (values.length !== 1536) throw new Error(`EMBED_DIM_MISMATCH_${values.length}`);
+  // ASSUMPTION: PostgREST casts a JSON number array to the vector(1536)
+  // parameter, as in Supabase's own vector-search examples.
+  const rpcRes = await fetchWithTimeout(`${supabaseUrl}/rest/v1/rpc/match_chunks`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+    },
+    body: JSON.stringify({ query_embedding: values, match_corpus: corpusId, match_count: TOP_K }),
+  });
+  if (!rpcRes.ok) throw new Error(`MATCH_FAILED_${rpcRes.status}`);
+  const rows: { source_id: string; title?: string | null; content: string; similarity: number }[] =
+    await rpcRes.json();
+  return rows.map((r) => ({
+    sourceId: r.source_id,
+    title: r.title ?? undefined,
+    snippet: r.content.length > 300 ? r.content.slice(0, 300) + "…" : r.content,
+  }));
+}
+
+async function retrieve(query: string, corpusId: string): Promise<Citation[]> {
+  try {
+    return await withTimeout(retrieveViaFileSearch(query, corpusId), 15_000);
+  } catch (e) {
+    if (e instanceof NotImplementedError) {
+      return await withTimeout(retrieveViaPgvector(query, corpusId), 15_000);
+    }
+    throw e;
+  }
+}
+
+Deno.serve(async (req) => {
+  if (req.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
+  const body = await req.json().catch(() => null);
+  const text = body?.inputText;
+  if (typeof text !== "string" || !text.trim() || text.length > 4000) {
+    return new Response(JSON.stringify({ error: "INVALID_INPUT", code: "INVALID_INPUT", message: "text must be 1..4000 chars" }), { status: 400 });
+  }
+  const schema = body?.schema;
+  // Mode + corpus come from the run record (set at createRun, §4.1);
+  // the client copies them here and finishRun verifies them (§4.4).
+  const grounded = body?.mode === "grounded";
+  const corpusId = typeof body?.corpusId === "string" && body.corpusId.trim() ? body.corpusId.trim() : null;
+  let citations: Citation[] = [];
+  if (grounded) {
+    try {
+      if (!corpusId) throw new Error("NO_CORPUS");
+      citations = await retrieve(text, corpusId);
+      if (citations.length === 0) throw new Error("NO_CITATIONS");
+    } catch {
+      // A grounded run NEVER degrades silently to a plain answer.
+      return fail("AI_UNGROUNDED", 502);
+    }
+  }
+  let contextBlock = "";
+  if (citations.length) {
+    const joined = citations
+      .map((c, i) => `[${i + 1}] ${c.title ?? c.sourceId}: ${c.snippet ?? ""}`)
+      .join("\n");
+    contextBlock = "\n\nSources (answer from these only):\n" + joined.slice(0, CONTEXT_CAP_CHARS);
+  }
+  const callGemini = async () => {
+    const ai = new GoogleGenAI({ apiKey: Deno.env.get("GEMINI_API_KEY") });
+    const interaction = await withTimeout(
+      ai.interactions.create({
+        model: GEMINI_MODEL,
+        input: body.systemPrompt + contextBlock + "\n\n" + text,
+        response_format: { type: "text", mime_type: "application/json", schema },
+      }),
+      15_000,
+    );
+    return JSON.parse(interaction.output_text ?? "{}");
+  };
+  const done = (output: unknown, model: string) => {
+    // Belt-and-braces: a grounded answer with zero citations is not a
+    // result (D73 rule), re-checked at the point of return.
+    if (grounded && citations.length === 0) return fail("AI_UNGROUNDED", 502);
+    return Response.json({ status: "done", output, model, mode: grounded ? "grounded" : "plain", citations });
+  };
+  try {
+    return done(await callGemini(), GEMINI_MODEL);
+  } catch (e) {
+    await new Promise((r) => setTimeout(r, 2000)); // D52: one retry, 2 s back-off
+    try {
+      return done(await callGemini(), GEMINI_MODEL);
+    } catch (e1) {
+      try {
+        const groq = new Groq({ apiKey: Deno.env.get("GROQ_API_KEY") });
+        const res = await withTimeout(
+          groq.chat.completions.create({
+            model: GROQ_MODEL,
+            messages: [
+              { role: "system", content: body.systemPrompt + contextBlock },
+              { role: "user", content: text },
+            ],
+            response_format: {
+              type: "json_schema",
+              json_schema: { name: "run_output", strict: true, schema },
+            },
+            max_tokens: 800,
+          }),
+          15_000,
+        );
+        return done(JSON.parse(res.choices[0].message.content ?? "{}"), GROQ_MODEL);
+      } catch (e2) {
+        return fail(/429/.test(String(e2)) ? "AI_RATE_LIMITED" : "AI_UNAVAILABLE", 502);
+      }
+    }
+  }
+});
+```
+
+The pgvector leg's store (created once by the Integrator; seed in
+**small batches** — the fixed 2 GB disk goes read-only at 95% and WAL
+balloons on bulk loads):
+
+```sql
+create extension if not exists vector;
+create table if not exists public.corpus_chunks (
+  id         uuid primary key default gen_random_uuid(),
+  corpus_id  text not null,
+  source_id  text not null,
+  title      text,
+  content    text not null,
+  embedding  vector(1536) not null
+);
+create index if not exists corpus_chunks_corpus_id_idx on public.corpus_chunks (corpus_id);
+create index if not exists corpus_chunks_embedding_hnsw_idx
+  on public.corpus_chunks using hnsw (embedding vector_cosine_ops);
+create or replace function public.match_chunks(
+  query_embedding vector(1536), match_corpus text, match_count int
+)
+returns table (source_id text, title text, content text, similarity float)
+language sql stable as $$
+  select c.source_id, c.title, c.content, 1 - (c.embedding <=> query_embedding) as similarity
+  from public.corpus_chunks c
+  where c.corpus_id = match_corpus
+  order by c.embedding <=> query_embedding
+  limit match_count;
+$$;
+```
+
+**Corpus + gate discipline (council-fixed, decided the night before —
+not on build morning):**
+- Corpus is **public or sanitized material only** (free-tier terms let
+  Google use submitted content, uploaded files included). File Search
+  corpus ≤ ~330 MB raw (1 GB store cap ≈ 3× with embeddings); the
+  **pgvector shadow corpus is capped at ≤ 50 MB raw** (top documents
+  only), ingested in small batches with a disk check between batches,
+  and shadow ingestion **aborts at 70% disk**.
+- The shadow is built **after** the 08:30 budget read, only if the
+  measured per-phase budget leaves headroom, and carries its own line
+  in that budget.
+- **08:30 gate, pre-committed defaults:** primary is File Search
+  unless the AI Studio read shows a disqualifying limit (project
+  limits absent/unusable, or verification incomplete) — then pgvector
+  is primary. The switch test is a **fixed 5-question subset** of the
+  eval set, owned by role C, run immediately after the gate and logged
+  in the run doc. If no gate call is possible by 09:00, the fallback
+  is plain mode + the seeded run; retrieval ships only if it clears
+  the eval set by the freeze.
+- **Eval set:** 10–20 fixed questions with expected sources, run
+  against **whichever leg will serve the pitch** (re-run in full after
+  any switch), including **at least two deliberate zero-citation
+  cases** proving the `AI_UNGROUNDED` → seeded-fallback path end to end.
+
+
 ## 5. Endpoint contract
 
 **Request** (Edge Function POST body): `{ shareId: string,
