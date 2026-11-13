@@ -332,7 +332,7 @@ Deno.serve(async (req) => {
       }),
       15_000,
     );
-    return JSON.parse(interaction.output_text);
+    return JSON.parse(interaction.output_text ?? "{}");
   };
   try {
     return Response.json({ status: "done", output: await callGemini(), model: GEMINI_MODEL });
