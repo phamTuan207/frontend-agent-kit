@@ -545,7 +545,6 @@ const TOP_K = 5; // server constant — never from the request (D73 rule)
 const CONTEXT_CAP_CHARS = 6000; // retrieved context cap, separate from the 4,000-char input cap
 
 type Citation = { sourceId: string; title?: string; snippet?: string };
-class NotImplementedError extends Error {}
 
 const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
   Promise.race([
