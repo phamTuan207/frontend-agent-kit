@@ -474,9 +474,10 @@ export function useAiClient() {
 Phase 1 of D73, landed the night before build day. The endpoint stops
 being a bare model call for grounded runs: a run created with
 `mode: "grounded"` is answered from the team's own corpus, and its
-result carries the citations that prove it. Phase 2 (the File Search
-leg's live verification) stays gated on the build-day 08:30 check —
-see the gate rules at the end of this section.
+result carries the citations that prove it. Phase 2 (File Search
+retrieval) is conditional — it is NOT implemented in Phase 1 and stays
+out of this section until the coordinator activates it (decision
+03:55, 2026-11-14).
 
 **Mode is a server-side fact, not a client preference.** The mode is
 fixed at `createRun` and stored on the run (§4.1: `mode`, `corpusId`).
@@ -507,19 +508,14 @@ The triage classifier body is Phase 2 — the flag, the gate rule, and
 the `triageNeedsDocs` hook in the code block below are the Phase 1
 contract.
 
-**Two retrieval legs, one primary per deployment.** The primary leg
-is chosen at the 08:30 gate and set as env (`RETRIEVAL_LEG`) — the
-other leg is a tested-once switch (flip the env, re-run the eval set),
-not a per-request fallback. The legs differ in shape: the **pgvector
-leg** retrieves BEFORE generation and injects a capped sources block
-(its citations are our own `source_id`s by construction); the **File
-Search leg** is fused INTO the Gemini call as a tool — its citations
-are harvested from the response's `FileCitation` annotations (shape
-verified 2026-11-13 against the official guide, the Interactions
-reference, and the installed SDK types; it carries title/URI but **no
-retrieved-text snippet**). On the File Search leg, Groq cannot ground,
-so a failed Gemini chain returns `AI_UNGROUNDED` rather than a plain
-answer wearing a grounded label.
+**One retrieval leg in Phase 1: pgvector.** The pgvector leg retrieves
+BEFORE generation and injects a capped sources block (its citations
+are our own `source_id`s by construction). There is no leg switch in
+Phase 1 — File Search retrieval is a conditional Phase 2, not
+implemented here (coordinator decision 03:55, 2026-11-14). Its
+citation shape was verified at the type level 2026-11-13 (recorded in
+`research/backend-verified-limits-and-debate-20261113.md` §3), so the
+leg can be restored from that record if Phase 2 is activated.
 
 ```ts
 // Deno.serve — ai-run WITH the D73 Phase 1 retrieval leg. This block
@@ -540,10 +536,6 @@ const GROQ_MODEL = Deno.env.get("GROQ_MODEL") ?? "openai/gpt-oss-120b";
 // exactly. Hook: `triageNeedsDocs` below.
 const TRIAGE_ENABLED = Deno.env.get("TRIAGE_ENABLED") === "true";
 function triageNeedsDocs(_text: string): boolean { return true; } // Phase 2: replace with the cheap classifier
-// D73: ONE primary retrieval leg per deployment, chosen at the 08:30
-// gate and set as env — switching legs = flip env + re-run the eval set.
-const RETRIEVAL_LEG = Deno.env.get("RETRIEVAL_LEG") ?? "pgvector"; // "pgvector" | "file-search"
-const FILE_SEARCH_STORE = Deno.env.get("FILE_SEARCH_STORE_NAME") ?? "";
 const TOP_K = 5; // server constant — never from the request (D73 rule)
 const CONTEXT_CAP_CHARS = 6000; // retrieved context cap, separate from the 4,000-char input cap
 
@@ -558,50 +550,6 @@ const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
   ]);
 const fail = (error: string, status: number) =>
   new Response(JSON.stringify({ error, code: error }), { status });
-
-// File Search leg (VERIFIED 2026-11-13 against the official File Search
-// guide, the Interactions API reference, and the installed @google/genai
-// 3.3.0 types): on the Interactions API, File Search is a tool on the
-// generation call itself — { type: "file_search",
-// file_search_store_names, top_k, metadata_filter } — and attribution
-// returns as FileCitation annotations on the model_output step's text
-// blocks: { type: "file_citation", document_uri?, file_name?, source?,
-// page_number?, media_id?, start_index?, end_index? }. There is NO
-// retrieved-text snippet on this API (the `source` field's semantics are
-// undefined in the docs — do not build on it), so this leg's citations
-// carry title/uri only and `snippet` stays undefined. Reading only
-// `output_text` LOSES the citations — harvest the steps. (The
-// generateContent API returns a richer shape —
-// groundingMetadata.groundingChunks[].retrievedContext { title, uri,
-// text } — switching the generation API to get snippets is a Phase 2
-// decision, not a silent swap.)
-const fileSearchTool = {
-  type: "file_search" as const,
-  file_search_store_names: [FILE_SEARCH_STORE],
-  top_k: TOP_K,
-};
-function harvestCitations(interaction: unknown): Citation[] {
-  const seen = new Set<string>();
-  const out: Citation[] = [];
-  const steps = (interaction as { steps?: unknown[] })?.steps ?? [];
-  for (const step of steps) {
-    const s = step as { type?: string; content?: unknown[] };
-    if (s?.type !== "model_output") continue;
-    for (const block of s.content ?? []) {
-      const b = block as { type?: string; annotations?: unknown[] };
-      if (b?.type !== "text") continue;
-      for (const ann of b.annotations ?? []) {
-        const a = ann as { type?: string; document_uri?: string; file_name?: string };
-        if (a?.type !== "file_citation") continue;
-        const sourceId = a.document_uri ?? a.file_name ?? "file-search";
-        if (seen.has(sourceId)) continue;
-        seen.add(sourceId);
-        out.push({ sourceId, title: a.file_name });
-      }
-    }
-  }
-  return out;
-}
 
 // pgvector shadow leg: embed the query (Gemini embeddings, REST), then
 // the match_chunks RPC — the corpus filter lives in SQL, server-side.
@@ -664,9 +612,7 @@ async function retrieveViaPgvector(query: string, corpusId: string): Promise<Cit
 }
 
 async function retrieve(query: string, corpusId: string): Promise<Citation[]> {
-  // pgvector leg only — pre-generation retrieval. The File Search leg
-  // does not pass through here: its retrieval is fused into the Gemini
-  // call and its citations are harvested from the response.
+  // pgvector leg only — pre-generation retrieval.
   return await withTimeout(retrieveViaPgvector(query, corpusId), 15_000);
 }
 
@@ -685,7 +631,7 @@ Deno.serve(async (req) => {
   const needsDocs = !TRIAGE_ENABLED || triageNeedsDocs(text); // F1: flag off => always true
   const effectiveGrounded = grounded && needsDocs;
   let citations: Citation[] = [];
-  if (effectiveGrounded && RETRIEVAL_LEG !== "file-search") {
+  if (effectiveGrounded) {
     try {
       if (!corpusId) throw new Error("NO_CORPUS");
       citations = await retrieve(text, corpusId);
@@ -702,21 +648,18 @@ Deno.serve(async (req) => {
       .join("\n");
     contextBlock = "\n\nSources (answer from these only):\n" + joined.slice(0, CONTEXT_CAP_CHARS);
   }
-  const callGemini = async (): Promise<{ output: unknown; harvested?: Citation[] }> => {
+  const callGemini = async (): Promise<{ output: unknown }> => {
     const ai = new GoogleGenAI({ apiKey: Deno.env.get("GEMINI_API_KEY") });
-    const useTool = grounded && RETRIEVAL_LEG === "file-search" && !!FILE_SEARCH_STORE;
     const interaction = await withTimeout(
       ai.interactions.create({
         model: GEMINI_MODEL,
         input: body.systemPrompt + contextBlock + "\n\n" + text,
         response_format: { type: "text", mime_type: "application/json", schema },
-        ...(useTool ? { tools: [fileSearchTool] } : {}),
       }),
       15_000,
     );
     return {
       output: JSON.parse(interaction.output_text ?? "{}"),
-      harvested: useTool ? harvestCitations(interaction) : undefined,
     };
   };
   const done = (output: unknown, model: string) => {
@@ -727,7 +670,6 @@ Deno.serve(async (req) => {
   };
   const runGemini = async () => {
     const r = await callGemini();
-    if (r.harvested) citations = r.harvested;
     return r.output;
   };
   try {
@@ -737,9 +679,8 @@ Deno.serve(async (req) => {
     try {
       return done(await runGemini(), GEMINI_MODEL);
     } catch (e1) {
-      // Groq has no File Search: on that leg a failed Gemini chain is
-      // AI_UNGROUNDED, never a silently-plain fallback answer.
-      if (grounded && RETRIEVAL_LEG === "file-search") return fail("AI_UNGROUNDED", 502);
+      // Groq fallback carries the same retrieved context block — the
+      // pgvector citations already ground the answer.
       try {
         const groq = new Groq({ apiKey: Deno.env.get("GROQ_API_KEY") });
         const res = await withTimeout(
@@ -802,25 +743,22 @@ $$;
 **Corpus + gate discipline (council-fixed, decided the night before —
 not on build morning):**
 - Corpus is **public or sanitized material only** (free-tier terms let
-  Google use submitted content, uploaded files included). File Search
-  corpus ≤ ~330 MB raw (1 GB store cap ≈ 3× with embeddings); the
+  Google use submitted content, uploaded files included). The
   **pgvector shadow corpus is capped at ≤ 50 MB raw** (top documents
   only), ingested in small batches with a disk check between batches,
   and shadow ingestion **aborts at 70% disk**.
 - The shadow is built **after** the 08:30 budget read, only if the
   measured per-phase budget leaves headroom, and carries its own line
   in that budget.
-- **08:30 gate, pre-committed defaults:** primary is File Search
-  unless the AI Studio read shows a disqualifying limit (project
-  limits absent/unusable, or verification incomplete) — then pgvector
-  is primary. The switch test is a **fixed 5-question subset** of the
-  eval set, owned by role C, run immediately after the gate and logged
-  in the run doc. If no gate call is possible by 09:00, the fallback
-  is plain mode + the seeded run; retrieval ships only if it clears
-  the eval set by the freeze.
+- **08:30 gate, pre-committed defaults:** primary is pgvector — there
+  is no second leg in Phase 1 (File Search retrieval is a conditional
+  Phase 2). A **fixed 5-question subset** of the eval set is run
+  immediately after the gate as a smoke check, owned by role C and
+  logged in the run doc. If no gate call is possible by 09:00, the
+  fallback is plain mode + the seeded run; retrieval ships only if it
+  clears the eval set by the freeze.
 - **Eval set:** 10–20 fixed questions with expected sources, run
-  against **whichever leg will serve the pitch** (re-run in full after
-  any switch), including **at least two deliberate zero-citation
+  against the pgvector leg that serves the pitch, including **at least two deliberate zero-citation
   cases** proving the `AI_UNGROUNDED` → seeded-fallback path end to end.
 
 
