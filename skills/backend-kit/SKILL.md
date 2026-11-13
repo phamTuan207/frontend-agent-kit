@@ -266,7 +266,10 @@ full-table scan (32,000 docs scanned per query is the cap).
   mutation SHA-256-hashes it and stores `inputHash` + `inputChars`,
   never the text itself (Backend charter: no raw personal input at
   rest). The client also passes `source` (D51) and `stub` (seeded runs
-  only — live client calls always pass `stub: false`). Dedup on
+  only — live client calls always pass `stub: false`), plus `mode` and
+  `corpusId` (D73) — both copied from the run record into the endpoint
+  call (§4.4); `mode` is fixed at createRun and stored on the run.
+  Dedup on
   `idempotencyKey` inside the same transaction: look the key up on its
   index first, return the existing run on a hit.
 - `finishRun` / `failRun` (public mutations — the client calls them after
@@ -278,9 +281,14 @@ full-table scan (32,000 docs scanned per query is the cap).
   transaction when the run's `stub` is false — the counter counts
   completed real-AI runs only, and a run patched twice still counts
   once (increment only on the pending → done transition).
-  `finishRun` additionally verifies the returned `mode` against the
-  stored run's mode and stores the returned `citations` — a mode
-  mismatch fails the patch, exactly like a key mismatch (D73).
+  `finishRun` additionally verifies the returned `mode` and `citations`
+  against the stored run — the comparison is: returned `mode` must equal
+  the stored `mode`, and returned `citations` must be an array
+  (non-empty when the stored mode is `grounded`); the patch then stores
+  the returned `citations` on the run verbatim. A mode mismatch fails
+  the patch, exactly like a key mismatch (D73). Exception: a
+  grounded→plain downgrade is accepted ONLY as a triage verdict
+  (`TRIAGE_ENABLED` on, §4.5) — any other mismatch fails the patch.
 - `getCounter` (query, public): return the `counter` record's
   `completedReal` (0 when no record exists yet). This is the pitch
   number: stub runs are excluded by construction, and the live log /
