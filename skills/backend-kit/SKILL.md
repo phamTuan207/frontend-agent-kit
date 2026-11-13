@@ -310,34 +310,61 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "INVALID_INPUT", code: "INVALID_INPUT", message: "text must be 1..4000 chars" }), { status: 400 });
   }
   const schema = body?.schema; // JSON Schema for the idea's output shape (from the client, validated below)
-  try {
+  // D50 caps, enforced here: every provider call is raced against a 15 s
+  // timeout (an SDK-agnostic Promise.race — no SDK timeout option is
+  // assumed). D52: the primary gets ONE retry after a 2 s back-off; only
+  // then does the Groq fallback fire. This endpoint is the only place a
+  // provider retry lives — the client never re-fires a call for one tap.
+  const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
+    Promise.race([
+      p,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("AI_TIMEOUT")), ms)
+      ),
+    ]);
+  const callGemini = async () => {
     const ai = new GoogleGenAI({ apiKey: Deno.env.get("GEMINI_API_KEY") });
-    const interaction = await ai.interactions.create({
-      model: GEMINI_MODEL,
-      input: body.systemPrompt + "\n\n" + text,
-      response_format: { type: "text", mime_type: "application/json", schema },
-    });
-    return Response.json({ status: "done", output: JSON.parse(interaction.output_text), model: GEMINI_MODEL });
+    const interaction = await withTimeout(
+      ai.interactions.create({
+        model: GEMINI_MODEL,
+        input: body.systemPrompt + "\n\n" + text,
+        response_format: { type: "text", mime_type: "application/json", schema },
+      }),
+      15_000,
+    );
+    return JSON.parse(interaction.output_text);
+  };
+  try {
+    return Response.json({ status: "done", output: await callGemini(), model: GEMINI_MODEL });
   } catch (e) {
-    // Gemini failed (429, 5xx, or invalid key) — one fallback attempt on Groq.
+    // D52: one retry of the primary after a 2 s back-off.
+    await new Promise((r) => setTimeout(r, 2000));
     try {
-      const groq = new Groq({ apiKey: Deno.env.get("GROQ_API_KEY") });
-      const res = await groq.chat.completions.create({
-        model: GROQ_MODEL,
-        messages: [
-          { role: "system", content: body.systemPrompt },
-          { role: "user", content: text },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: { name: "run_output", strict: true, schema },
-        },
-        max_tokens: 800,
-      });
-      return Response.json({ status: "done", output: JSON.parse(res.choices[0].message.content ?? "{}"), model: GROQ_MODEL });
-    } catch (e2) {
-      const code = /429/.test(String(e2)) ? "AI_RATE_LIMITED" : "AI_UNAVAILABLE";
-      return new Response(JSON.stringify({ error: code, code }), { status: 502 });
+      return Response.json({ status: "done", output: await callGemini(), model: GEMINI_MODEL });
+    } catch (e1) {
+      // Primary failed twice — one fallback attempt on Groq.
+      try {
+        const groq = new Groq({ apiKey: Deno.env.get("GROQ_API_KEY") });
+        const res = await withTimeout(
+          groq.chat.completions.create({
+            model: GROQ_MODEL,
+            messages: [
+              { role: "system", content: body.systemPrompt },
+              { role: "user", content: text },
+            ],
+            response_format: {
+              type: "json_schema",
+              json_schema: { name: "run_output", strict: true, schema },
+            },
+            max_tokens: 800,
+          }),
+          15_000,
+        );
+        return Response.json({ status: "done", output: JSON.parse(res.choices[0].message.content ?? "{}"), model: GROQ_MODEL });
+      } catch (e2) {
+        const code = /429/.test(String(e2)) ? "AI_RATE_LIMITED" : "AI_UNAVAILABLE";
+        return new Response(JSON.stringify({ error: code, code }), { status: 502 });
+      }
     }
   }
 });
@@ -400,22 +427,13 @@ export function useAiClient() {
       try {
         data = await callEdge();
       } catch (e) {
+        // No app-level retry (D52): the endpoint already retried the primary
+        // once after a 2 s back-off and fell back to Groq before answering.
+        // One tap = one call chain; on failure the screen falls back to the
+        // cached last-good run from the runs subscription (then the seed).
         const code = toCode(e);
-        if (code === "AI_RATE_LIMITED") {
-          // One app-level retry after 2 s (contract rule, §5). Transport-level
-          // retries already happened inside fetchJson — do not add more.
-          await new Promise((r) => setTimeout(r, 2000));
-          try {
-            data = await callEdge();
-          } catch (e2) {
-            const code2 = toCode(e2);
-            await failRun({ runId, shareId: args.shareId, idempotencyKey, error: code2 });
-            return { runId, error: code2 };
-          }
-        } else {
-          await failRun({ runId, shareId: args.shareId, idempotencyKey, error: code });
-          return { runId, error: code };
-        }
+        await failRun({ runId, shareId: args.shareId, idempotencyKey, error: code });
+        return { runId, error: code };
       }
       await finishRun({ runId, shareId: args.shareId, idempotencyKey, output: data.output, model: data.model });
       return { runId, status: "done", output: data.output, model: data.model };
@@ -445,15 +463,19 @@ assume it exists).
 |---|---|---|
 | Validation fails | 400 `{ error: "INVALID_INPUT", code: "INVALID_INPUT", message }` | Show inline; do not retry |
 | Gemini key missing / invalid | 502 `{ error: "AI_UNAVAILABLE", code: "AI_UNAVAILABLE" }` (after Groq also fails) | Show "AI is unavailable — showing the last saved result" + seeded run |
-| Rate limit / 5xx | 502 `{ error: "AI_RATE_LIMITED", code: "AI_RATE_LIMITED" }` | Retry once after 2 s, then seeded result |
-| Model timeout (>25 s) | Client aborts at 30 s; run patched `status: "error"`, `error: "AI_TIMEOUT"` | Retry once; then seeded result |
+| Rate limit / 5xx | Endpoint retries the primary once after a 2 s back-off, then falls back to Groq (D52); only if all fail: 502 `{ error: "AI_RATE_LIMITED", code: "AI_RATE_LIMITED" }` | Do not retry — show the last saved result (cached last-good, D52); if none, the seeded run |
+| Provider timeout (>15 s) | Endpoint races every provider call against 15 s (D50); a timed-out primary still gets its one D52 retry, then Groq. Client aborts at 30 s; run patched `status: "error"`, `error: "AI_TIMEOUT"` | Do not retry — last saved result, else seeded run |
 | Usage cap hit | `checkCap` refuses before any AI call, `error: "USAGE_CAP"` | Show seeded result; do not retry |
 | Network drop mid-call | Edge Function may still complete server-side | On `AppState` active, re-query by `shareId`; if `status: "done"`, show it — never fire a duplicate call blindly |
 
 **Hard numbers:** input cap 4,000 chars/call; output cap 800 tokens;
-client timeout 30 s; retry once (network error, or once after 2 s on
-`AI_RATE_LIMITED`) — never on validation, never on `USAGE_CAP`, never
-on a 4xx; daily cap 200 AI calls via the server-side counter.
+provider timeout 15 s per call (endpoint-side, D50); client timeout
+30 s; retries live in exactly two places — transport-level inside
+`fetchJson` (network errors only) and ONE provider retry inside the
+endpoint after a 2 s back-off, then the Groq fallback (D52); the app
+never re-fires a call. Never retry on validation, on `USAGE_CAP`, or
+on a 4xx; daily cap 200 AI calls via the server-side usage counter
+(`checkCap`).
 
 ## 6. Demo insurance (built into the backend, not the pitch script)
 
