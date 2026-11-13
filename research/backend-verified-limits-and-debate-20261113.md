@@ -18,7 +18,8 @@
   (https://ai.google.dev/gemini-api/docs/rate-limits). Do NOT plan
   against third-party figures (e.g. "15 RPM / 1,500 RPD" — unofficial).
 - Limits are **per project**, not per key; RPD resets at midnight
-  Pacific = **15:00 ICT** — inside the demo hour.
+  Pacific — **15:00 ICT is a CHECKPOINT, not a certain reset** (ruling
+  A8: the real reset time is read in AI Studio at 08:30).
 - File Search: "Free of charge" on the Free Tier end-to-end (indexing
   embeddings follow embeddings pricing, whose Free Tier is $0; storage
   and query-time embeddings free). Store cap on Free: 1 GB computed as
@@ -71,7 +72,9 @@
 1. The "real AI twice on the real phone" milestone is gameable — both
    runs use team-chosen inputs. Proposed tightening: one live run on a
    NOVEL input written outside the Backend track, after the 15:00 ICT
-   quota reset, with the counter incrementing — or the team states
+   quota checkpoint (ruling A8: a checkpoint, not a certain reset —
+   the real reset time is read in AI Studio at 08:30), with the
+   counter incrementing — or the team states
    openly before the pitch that the demo is a seeded result with a
    live bonus leg.
 2. The 200-calls/day `checkCap` number is team-invented. Fix at the
