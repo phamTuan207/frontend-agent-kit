@@ -311,6 +311,9 @@ full-table scan (32,000 docs scanned per query is the cap).
 
 ### 4.3 Edge Function (`supabase/functions/ai-run/index.ts`, Deno)
 
+> SUPERSEDED by §4.5 — copy §4.5 instead. This section remains only as
+> the pre-D73 reference handler.
+
 ```ts
 // Deno.serve — one function, same JSON envelope as §5.
 // Secrets: GEMINI_API_KEY, GROQ_API_KEY, GEMINI_MODEL, GROQ_MODEL
