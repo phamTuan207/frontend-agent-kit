@@ -485,6 +485,17 @@ seeded run exactly like the other AI errors (§5) — the attempt is
 logged in the run document, never silently downgraded to a plain
 answer presented as fact.
 
+**Triage (flag — OFF by default, D73 F1).** Before the main call, a cheap
+triage step classifies the request (grounded-QA / plain generation /
+structured action); a request that needs no documents is answered plain
+without retrieval. The flag is `TRIAGE_ENABLED` (env, default off) —
+enable it ONLY if the 08:30 AI Studio read shows RPD headroom, because
+triage costs one extra call per request and the RPD pool is shared.
+With the flag off, every grounded request retrieves (Phase 1 behaviour).
+The triage classifier body is Phase 2 — the flag, the gate rule, and
+the `triageNeedsDocs` hook in the code block below are the Phase 1
+contract.
+
 **Two retrieval legs, one primary per deployment.** The primary leg
 is chosen at the 08:30 gate and set as env (`RETRIEVAL_LEG`) — the
 other leg is a tested-once switch (flip the env, re-run the eval set),
@@ -511,6 +522,13 @@ import Groq from "npm:groq-sdk@1.6.0";
 
 const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-3.5-flash-lite";
 const GROQ_MODEL = Deno.env.get("GROQ_MODEL") ?? "openai/gpt-oss-120b";
+// D73 F1 — TRIAGE flag (OFF by default): enable ONLY if the 08:30 AI
+// Studio read shows RPD headroom (triage costs one extra call per
+// request). The classifier body is Phase 2; until it lands, triage
+// always answers "needs docs", so Phase 1 behaviour is preserved
+// exactly. Hook: `triageNeedsDocs` below.
+const TRIAGE_ENABLED = Deno.env.get("TRIAGE_ENABLED") === "true";
+function triageNeedsDocs(_text: string): boolean { return true; } // Phase 2: replace with the cheap classifier
 // D73: ONE primary retrieval leg per deployment, chosen at the 08:30
 // gate and set as env — switching legs = flip env + re-run the eval set.
 const RETRIEVAL_LEG = Deno.env.get("RETRIEVAL_LEG") ?? "pgvector"; // "pgvector" | "file-search"
@@ -654,8 +672,10 @@ Deno.serve(async (req) => {
   // the client copies them here and finishRun verifies them (§4.4).
   const grounded = body?.mode === "grounded";
   const corpusId = typeof body?.corpusId === "string" && body.corpusId.trim() ? body.corpusId.trim() : null;
+  const needsDocs = !TRIAGE_ENABLED || triageNeedsDocs(text); // F1: flag off => always true
+  const effectiveGrounded = grounded && needsDocs;
   let citations: Citation[] = [];
-  if (grounded && RETRIEVAL_LEG !== "file-search") {
+  if (effectiveGrounded && RETRIEVAL_LEG !== "file-search") {
     try {
       if (!corpusId) throw new Error("NO_CORPUS");
       citations = await retrieve(text, corpusId);
@@ -692,8 +712,8 @@ Deno.serve(async (req) => {
   const done = (output: unknown, model: string) => {
     // Belt-and-braces: a grounded answer with zero citations is not a
     // result (D73 rule), re-checked at the point of return.
-    if (grounded && citations.length === 0) return fail("AI_UNGROUNDED", 502);
-    return Response.json({ status: "done", output, model, mode: grounded ? "grounded" : "plain", citations });
+    if (effectiveGrounded && citations.length === 0) return fail("AI_UNGROUNDED", 502);
+    return Response.json({ status: "done", output, model, mode: effectiveGrounded ? "grounded" : "plain", citations });
   };
   const runGemini = async () => {
     const r = await callGemini();
