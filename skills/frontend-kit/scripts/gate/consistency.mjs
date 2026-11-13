@@ -4951,27 +4951,60 @@ const IO_HOOK = `(() => {
               const tm = a.effect.getComputedTiming(); if (tm.iterations === Infinity || !(tm.duration > 0)) continue;
               if ((a.currentTime || 0) > 500) continue;
               // D16: the animation's keyframes, summarised — the scroll-reveal check reads them to tell a
-              // Pattern 5 reveal (a fade and/or a rise of 24px at most, nothing else) from any other reveal
+              // Pattern 5 reveal (a fade and/or a rise of 24px at most, nothing else) from any other reveal.
+              // The rise is summarised in MEASURED pixels: an authored length is resolved against the
+              // target's own font size (em), the root's (rem) and the viewport (vw/vh), so translateY(2em)
+              // at 20px type reads as the 40px it is, not as "2". A unit that cannot be resolved honestly
+              // (%, calc(), a physical unit) marks the summary unres, and an unres summary earns the reveal
+              // no carve-out. The summary also keeps the rise of the LAST frame that states a transform
+              // (tyEnd), so the check can require the animation to be seen ending at rest; a final frame
+              // that leaves the transform unstated shows no end state and marks the summary unres too.
+              // (Regexes in this hook are written with doubled backslashes: the hook reaches the page as a
+              // template-literal string, and a single backslash is cooked away before the page sees it.)
               let kf = null;
               try {
                 const fr = a.effect.getKeyframes() || [];
                 if (fr.length >= 2) {
-                  const props = new Set(); let o0 = null, o1 = null, ty = 0, other = false;
+                  const props = new Set(); let o0 = null, o1 = null, ty = 0, tyEnd = 0, other = false, unres = false;
                   for (const k of fr) for (const pn of Object.keys(k)) if (!/^(offset|composite|easing|computedOffset)$/.test(pn)) props.add(pn);
                   const os = fr.map((k) => k.opacity).filter((v) => v != null).map(Number);
                   if (os.length) { o0 = os[0]; o1 = os[os.length - 1]; }
-                  for (const k of fr) {
-                    const tf = k.transform; if (!tf || tf === 'none') continue;
-                    for (const m of String(tf).matchAll(/([a-zA-Z0-9]+)\(([^)]*)\)/g)) {
-                      const ns = (m[2].match(/-?[\d.]+/g) || []).map(Number);
-                      if (m[1] === 'translateY') ty = Math.max(ty, Math.abs(ns[0] || 0));
-                      else if (m[1] === 'translate' || m[1] === 'translate3d') { if (Math.abs(ns[0] || 0) > 2) other = true; ty = Math.max(ty, Math.abs(ns[1] || 0)); }
-                      else if (m[1] === 'matrix') { if (Math.abs((ns[0] ?? 1) - 1) > 0.01 || Math.abs(ns[1] || 0) > 0.01 || Math.abs(ns[2] || 0) > 0.01 || Math.abs((ns[3] ?? 1) - 1) > 0.01 || Math.abs(ns[4] || 0) > 2) other = true; ty = Math.max(ty, Math.abs(ns[5] || 0)); }
-                      else if (m[1] === 'matrix3d') { if (Math.abs((ns[0] ?? 1) - 1) > 0.01 || Math.abs((ns[5] ?? 1) - 1) > 0.01 || Math.abs((ns[10] ?? 1) - 1) > 0.01 || Math.abs(ns[12] || 0) > 2) other = true; ty = Math.max(ty, Math.abs(ns[13] || 0)); }
+                  const fsT = parseFloat(getComputedStyle(t).fontSize) || 16, fsR = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+                  const resPx = (tok) => {
+                    const m = /^(-?[\\d.]+)([a-z%]*)$/.exec(String(tok).trim());
+                    if (!m) return null;
+                    const v = parseFloat(m[1]);
+                    if (m[2] === '' || m[2] === 'px') return v;
+                    if (m[2] === 'em') return v * fsT;
+                    if (m[2] === 'rem') return v * fsR;
+                    if (m[2] === 'vw') return v * innerWidth / 100;
+                    if (m[2] === 'vh') return v * innerHeight / 100;
+                    return null;
+                  };
+                  const frameTy = (tf) => {
+                    let fty = 0;
+                    for (const m of String(tf).matchAll(/([a-zA-Z0-9]+)\\(([^)]*)\\)/g)) {
+                      if (m[1] === 'translateY' || m[1] === 'translate' || m[1] === 'translate3d') {
+                        const args = m[2].split(/[,\\s]+/).filter(Boolean), px = args.map(resPx);
+                        if (m[1] === 'translateY') { if (px[0] == null) unres = true; else fty = Math.max(fty, Math.abs(px[0])); }
+                        else { if (px[0] == null || (args.length > 1 && px[1] == null)) unres = true; if (Math.abs(px[0] || 0) > 2) other = true; if (px[1] != null) fty = Math.max(fty, Math.abs(px[1])); }
+                      }
+                      else if (m[1] === 'matrix') { const ns = (m[2].match(/-?[\\d.]+/g) || []).map(Number); if (Math.abs((ns[0] ?? 1) - 1) > 0.01 || Math.abs(ns[1] || 0) > 0.01 || Math.abs(ns[2] || 0) > 0.01 || Math.abs((ns[3] ?? 1) - 1) > 0.01 || Math.abs(ns[4] || 0) > 2) other = true; fty = Math.max(fty, Math.abs(ns[5] || 0)); }
+                      else if (m[1] === 'matrix3d') { const ns = (m[2].match(/-?[\\d.]+/g) || []).map(Number); if (Math.abs((ns[0] ?? 1) - 1) > 0.01 || Math.abs((ns[5] ?? 1) - 1) > 0.01 || Math.abs((ns[10] ?? 1) - 1) > 0.01 || Math.abs(ns[12] || 0) > 2) other = true; fty = Math.max(fty, Math.abs(ns[13] || 0)); }
                       else other = true;
                     }
-                  }
-                  kf = { props: [...props], o0, o1, ty: Math.round(ty * 10) / 10, other };
+                    return fty;
+                  };
+                  let lastTf = -1;
+                  fr.forEach((k, i) => { if (typeof k.transform === 'string') lastTf = i; });
+                  fr.forEach((k, i) => {
+                    if (typeof k.transform !== 'string') return;
+                    const fty = k.transform === 'none' ? 0 : frameTy(k.transform);
+                    ty = Math.max(ty, fty);
+                    if (i === lastTf) tyEnd = fty;
+                  });
+                  if (lastTf >= 0 && lastTf !== fr.length - 1) unres = true; // the final frame states no transform: no end state to read
+                  kf = { props: [...props], o0, o1, ty: Math.round(ty * 10) / 10, tyEnd: Math.round(tyEnd * 10) / 10, other, unres };
                 }
               } catch (e) {}
               S.list.push({ host, target: t, name: a.animationName || a.transitionProperty || 'an animation', dur: tm.duration, it: tm.iterations, y: scrollY, kf });
@@ -7196,18 +7229,23 @@ function lib() {
       if (!byHost.has(x.host)) byHost.set(x.host, []);
       byHost.get(x.host).push(x);
     }
-    // D16: a host whose animations are ALL Pattern 5 — the hook's keyframe summary shows a fade (from opacity
-    // 0) and/or a rise of 24px at most and nothing else, each played once — is the section's one allowed
-    // reveal, unless the section already spent it: a second host here, or a style-snapshot reveal the caller
-    // carved out (usedSecs). An animation whose keyframes the hook could not read earns no carve-out.
-    const p5kf = (kf) => !!kf && kf.props.every((pn) => pn === 'opacity' || pn === 'transform') && (kf.o0 == null || (kf.o0 <= 0.1 && kf.o1 >= 0.99)) && !kf.other && kf.ty <= 24 && (kf.o0 != null || kf.ty >= 3);
-    const hostsBySec = new Map();
-    for (const h of byHost.keys()) { const k = secIndex(h); if (!hostsBySec.has(k)) hostsBySec.set(k, []); hostsBySec.get(k).push(h); }
+    // D16: the section's one allowed reveal, counted in animated PARTS, not trigger hosts: the parts a
+    // section's IO records animated are gathered across every host, and the carve-out stands only when
+    // they number exactly one and every record for the section is Pattern 5 — the hook's keyframe summary
+    // shows a fade (from opacity 0) and/or a rise of 24px at most in MEASURED pixels, ending at rest (the
+    // last frame that states a transform at ~0; where it fades, opacity ending at 1) and nothing else, each
+    // played once. Two conforming parts in one section are two reveals however they were triggered — one
+    // section-level observer animating both children is not one reveal. A section that already spent its
+    // reveal on a style-snapshot carve-out (usedSecs) gets no second one here, and an animation whose
+    // keyframes the hook could not read — or could not resolve into measured pixels — earns no carve-out.
+    const p5kf = (kf) => !!kf && !kf.unres && kf.props.every((pn) => pn === 'opacity' || pn === 'transform') && (kf.o0 == null || (kf.o0 <= 0.1 && kf.o1 >= 0.99)) && !kf.other && kf.ty <= 24 && Math.abs(kf.tyEnd || 0) <= 1 && (kf.o0 != null || kf.ty >= 3);
+    const partsBySec = new Map(), recsBySec = new Map();
+    for (const [h, xs] of byHost) { const k = secIndex(h); if (!partsBySec.has(k)) { partsBySec.set(k, new Set()); recsBySec.set(k, []); } for (const x of xs) { partsBySec.get(k).add(x.target); recsBySec.get(k).push(x); } }
     for (const [host, xs] of byHost) {
       const hid = idOf(host); if (told.has(hid) || [...told].some((i) => { const e = els.get(i); return e && (e.contains(host) || host.contains(e)); })) continue;
       told.add(hid);
       const k = secIndex(host);
-      if (xs.every((x) => x.it === 1 && p5kf(x.kf)) && (hostsBySec.get(k) || []).length === 1 && !used.has(k)) continue; // the section's one Pattern 5 reveal
+      if ((recsBySec.get(k) || []).every((x) => x.it === 1 && p5kf(x.kf)) && (partsBySec.get(k) || new Set()).size === 1 && !used.has(k)) continue; // the section's one Pattern 5 reveal
       const x = xs[0];
       const n = x.it > 1 ? `${x.it} x ${(x.dur / 1000).toFixed(1)} s` : `${(x.dur / 1000).toFixed(1)} s`;
       out.push({ id: hid, sel: sel(host), text: label(host), msg: `starts ${x.name === 'an animation' ? 'an animation' : `"${x.name}"`} (${n}) the moment it is scrolled into view (an IntersectionObserver)${x.target !== host ? ` on ${sel(x.target).split(' > ').pop()}` : ''}`, doc: D(host.getBoundingClientRect()) });
