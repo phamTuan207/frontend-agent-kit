@@ -501,6 +501,21 @@ on a 4xx; daily cap 200 AI calls via the server-side usage counter
 
 ## 7. Build-day runbook (11:00–16:00)
 
+**Before build day (D49) — the deployments exist before the clock starts:**
+- The shared Supabase project is created close to build day — free
+  projects pause after 7 days idle, so a project created a week early
+  can be asleep at run start — and verified live: the dashboard opens,
+  and after the Integrator deploys `ai-run`, one real free-tier call
+  returns through the deployed function. Local development against it
+  uses `supabase functions serve` (see Supabase project hygiene below).
+- Per-agent Convex dev deployments + scoped deploy keys are created by
+  the Integrator (below), and each agent verifies `npx convex dev
+  --once` against its own deployment URL (a `*.convex.cloud` URL,
+  never `127.0.0.1`) before the rehearsal — not during it.
+- Keys (`GEMINI_API_KEY`, `GROQ_API_KEY`) live only as Supabase secrets
+  and Convex env vars (prod + every dev deployment). Humans hold the
+  keys; no key is ever committed or pasted into chat.
+
 - **Per-agent dev deployments.** Integrator creates prod + one cloud dev
   deployment per agent (`npx convex deployment create --type dev
   --select team:project:dev/<agent>`); per agent a scoped deploy key
