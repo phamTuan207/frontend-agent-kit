@@ -1,0 +1,14 @@
+# Supabase project config (minimal — only what the skeleton needs).
+# The `ai` function is deployed by a human tonight:
+#   supabase functions deploy ai --project-ref <REF>
+# No billing, no paid add-ons. Free tier only.
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[functions.ai]
+verify_jwt = true
