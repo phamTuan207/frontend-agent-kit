@@ -1,6 +1,6 @@
-# Activation Problem — Research Memo + Council Verdict (DRAFT D78)
+# Activation Problem — Research Memo + Council Verdict (D78 — AWARDED 2026-11-14)
 
-**Status:** Draft decision for Muse to award. Research memo + council verdict, written 2026-11-13 ~19:50 ICT.
+**Status:** AWARDED by Muse (coordinator) 2026-11-14 — recorded as D78 in `skills/frontend-kit/references/decisions.md`; mechanism landed on main as d37aa80. Research memo + council verdict, written 2026-11-13 ~19:50 ICT. Live test still owed (see §11).
 **Branch:** `migga/activation-problem` (from upstream main 4fba0b6).
 **Team:** Migga activation team — 1 research agent + 3-expert council (Expert 1 coordination/systems, Expert 2 multi-agent research, Expert 3 red team — see §6 for Expert 3 status).
 **Cost:** $0.00. No new paid service, account, key, or dependency.
@@ -78,7 +78,7 @@ Expert 3 was tasked to attack D74 and every candidate with real flaws + evidence
 
 Experts 1 and 2 agree independently on the primary; their mechanisms are compatible and merge into one. The research agent recommends the same combination (S1+S2 minimum, plus S3/S5).
 
-### DRAFT D78 — Coordinator liveness: pushed heartbeat + Deputy takeover under BUFFET §1 fencing, enforced by a scheduled probe (PROPOSED, not awarded)
+### D78 — Coordinator liveness: pushed heartbeat + Deputy takeover under BUFFET §1 fencing, enforced by a scheduled probe (AWARDED 2026-11-14)
 
 **D78 claims decision number 78.** Verified free: no `D78` in `skills/frontend-kit/references/decisions.md` on main 4fba0b6 (grep count 0); max decision recorded there is D73; D74–D77 are drafts in coord files. Claim recorded here first, per the runbook rule; to be written into `decisions.md` only after Muse awards it.
 
@@ -232,3 +232,12 @@ Amended probe (`coord/activation-probe.sh`, awk field parser after a sed quoting
 - Heartbeat lines are content, not server events: a coordinator can backdate HB timestamps or rotate blocked reasons ("waiting-X" -> "waiting-Y") to reset the clocks. Each rotation counts as progress only if it names a NEW blocker with evidence (the Deputy reads the heartbeat); rotation without evidence is visible in the log and the Deputy judges it. The probe implements no forgery cross-check — that is a Deputy-side inspection, not a probe property.
 - The 2-cycle rule needs three heartbeat lines: a run younger than 30 min cannot trip NO-PROGRESS even if it is dead from the start — but a young run trips STALE instead if its tip goes quiet with pending work, so the gap is covered by the other check.
 - NOT tested: the probe against the real fork; the probe as a live 5-min cron; the end-to-end wake drill; other machines' hook/cron availability. Same limits as round 2, unchanged.
+
+
+## 11. Award record (2026-11-14, coordinator Muse)
+
+**D78 AWARDED.** The design in §5 (as amended by the §8 dissent resolutions) + the Round 3 progress-signal condition (§10) is the decision. Recorded in `skills/frontend-kit/references/decisions.md` as D78. Mechanism landed on main as d37aa80 (BUFFET §1 + FLEET §1/§11 figures + §16.7 pointer + `coord/activation-probe.sh`).
+
+**Live test — NOT RUN.** The 20:30 rehearsal on 13/11 (the stated first live test) ran with Deputy TBD on the board — the succession was never armed — no heartbeat lines were pushed, no probe cron was installed, and no end-to-end wake drill ran. Verified 2026-11-14: zero `HB ` lines in `coord/*.md` (only the format example in this memo), `coord/BOARD.md:29` still "Deputy: TBD", no probe log exists. The probe has not run against the real repo. First live test remains owed for the next fleet run; until it passes, D78 is detector-proven (simulation 7/7 + Round 3 8/8) and actuator-assumed.
+
+**Residuals (unchanged from §5/§9):** nothing watches the watcher; commit time is a forgeable proxy for push time; a coordinator can fake progress with empty commits (the Deputy judges quality, the probe catches silence only).
